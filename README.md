@@ -11,9 +11,9 @@ Instead of building faceted triangle meshes in the host, the plugin constructs a
 1. Open SolidCraft (**0.44.1** or later).
 2. Choose **File ▸ Plugins… → Install plugin…** and select `dist/smooth-fdm-threads.zip`.
 3. Confirm the requested `commands@0.1` permissions (`files: []`, `net: false`, `clock: false`).
-4. Two commands are added to the **Model** ribbon tab:
-   - **apply-thread** — Thread an existing cylindrical shaft or hole face.
-   - **create-thread-pair** — Generate a standalone Bolt + Nut (or Bolt / Nut) test pair.
+4. Two commands are added to the **Model** tab's **Plugins** group (and menu):
+   - **Apply Thread** (`apply-thread`) — Thread an existing cylindrical shaft or hole face.
+   - **Thread Pair** (`create-thread-pair`) — Generate a standalone Bolt + Nut (or Bolt / Nut) test pair.
 
 ---
 
@@ -90,7 +90,7 @@ powershell -ExecutionPolicy Bypass -File scripts/package.ps1
 
 - `plugin.json` — SolidCraft `commands@0.1` plugin manifest and JSON Schema inputs.
 - `wit/plugin.wit` — Official SolidCraft `v0.44.1` WIT contract (`craft:plugin@0.1.0`).
-- `assets/icon.svg` — Monochrome `64×64` ribbon icon.
+- `assets/apply-thread.svg` & `assets/thread-pair.svg` — Monochrome `64×64` ribbon/menu icons (`apply-thread` threaded cylinder, `create-thread-pair` bolt + hex nut).
 - `src/math.rs` — Trapezoidal/buttress groove solver, tangent-trim fillet checks, orthonormal frame builder, and cylinder/mesh classification.
 - `src/commands.rs` — Command builder translating solved thread geometry into SolidCraft sketch, coil, visibility, circular pattern, and chamfer commands.
 - `src/lib.rs` — Wasm `command-plugin` guest entry points (`apply-thread`, `create-thread-pair`) and unit tests.

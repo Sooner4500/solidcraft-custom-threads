@@ -14,7 +14,7 @@
         "effect": "edit",
         "input_schema": {
           "type": "object",
-          "x-solidcraft-icon": "assets/icon.svg",
+          "x-solidcraft-icon": "assets/apply-thread.svg",
           "required": [
             "pitch",
             "upper_flank_angle_deg",
@@ -162,8 +162,8 @@
         },
         "slots": [
           {
-            "kind": "ribbon",
-            "name": "Model"
+            "kind": "menu",
+            "name": "Apply Thread"
           }
         ]
       },
@@ -172,7 +172,7 @@
         "effect": "edit",
         "input_schema": {
           "type": "object",
-          "x-solidcraft-icon": "assets/icon.svg",
+          "x-solidcraft-icon": "assets/thread-pair.svg",
           "required": [
             "major_diameter",
             "pitch",
@@ -329,8 +329,8 @@
         },
         "slots": [
           {
-            "kind": "ribbon",
-            "name": "Model"
+            "kind": "menu",
+            "name": "Thread Pair"
           }
         ]
       }

@@ -814,8 +814,36 @@ mod tests {
             .map(|v| v.as_str().unwrap())
             .collect();
 
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut seen_icons = std::collections::HashSet::new();
+        let mut seen_slots = std::collections::HashSet::new();
+
         for entry in m["runtime"]["entries"].as_array().unwrap() {
             let name = entry["name"].as_str().unwrap();
+            let icon = entry["input_schema"]["x-solidcraft-icon"]
+                .as_str()
+                .expect("entry must declare x-solidcraft-icon");
+            assert!(!icon.is_empty(), "entry '{name}' has empty x-solidcraft-icon");
+            assert!(
+                manifest_dir.join(icon).is_file(),
+                "entry '{name}' icon file '{icon}' does not exist"
+            );
+            assert!(
+                seen_icons.insert(icon.to_string()),
+                "duplicate icon '{icon}' across plugin entries"
+            );
+
+            let slots = entry["slots"].as_array().expect("entry must declare slots");
+            assert!(!slots.is_empty(), "entry '{name}' must declare at least one slot");
+            for slot in slots {
+                let slot_name = slot["name"].as_str().expect("slot must have name");
+                assert!(!slot_name.is_empty(), "entry '{name}' has empty slot name");
+                assert!(
+                    seen_slots.insert(slot_name.to_string()),
+                    "duplicate slot label '{slot_name}' across plugin entries"
+                );
+            }
+
             let props = entry["input_schema"]["properties"].as_object().unwrap();
             let mut defaults = serde_json::Map::new();
             for (k, prop) in props {

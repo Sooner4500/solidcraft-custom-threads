@@ -58,13 +58,20 @@ try {
     }
 
     Copy-Item (Join-Path $repoRoot "plugin.json") (Join-Path $pkgDir "plugin.json") -Force
-    Copy-Item (Join-Path $repoRoot "assets\icon.svg") (Join-Path $assetsOut "icon.svg") -Force
+    $assetFiles = Get-ChildItem (Join-Path $repoRoot "assets") -Filter "*.svg" -File
+    if (-not $assetFiles) {
+        throw "No SVG icon files found in assets\"
+    }
+    foreach ($asset in $assetFiles) {
+        Copy-Item $asset.FullName (Join-Path $assetsOut $asset.Name) -Force
+    }
 
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($rel in @("plugin.json", "plugin.wasm", "assets/icon.svg")) {
+        $relFiles = @("plugin.json", "plugin.wasm") + ($assetFiles | ForEach-Object { "assets/$($_.Name)" })
+        foreach ($rel in $relFiles) {
             $src = Join-Path $pkgDir ($rel -replace "/", "\")
             $entryName = "smooth-fdm-threads/$rel"
             [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
