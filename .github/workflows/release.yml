@@ -1,0 +1,48 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+
+  release:
+    name: Package & Publish Release
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@wasm-tools
+      - name: Build & wrap Wasm component
+        run: |
+          cargo build --target wasm32-unknown-unknown --release --locked
+          mkdir -p dist/custom-threads/assets
+          wasm-tools component new target/wasm32-unknown-unknown/release/custom_threads.wasm -o dist/custom-threads/plugin.wasm
+          wasm-tools validate dist/custom-threads/plugin.wasm
+          cp plugin.json dist/custom-threads/plugin.json
+          cp assets/*.svg dist/custom-threads/assets/
+          (cd dist && zip -r custom-threads.zip custom-threads)
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/custom-threads.zip
+          generate_release_notes: true

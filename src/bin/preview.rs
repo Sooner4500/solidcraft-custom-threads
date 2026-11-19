@@ -1,5 +1,5 @@
-use smooth_fdm_threads::commands::{PairMode, PairParams, build_thread_pair_commands};
-use smooth_fdm_threads::math::{EndChamfer, ThreadProfileParams};
+use custom_threads::commands::{PairMode, PairParams, build_thread_pair_commands};
+use custom_threads::math::{EndChamfer, ThreadProfileParams};
 use serde_json::json;
 
 fn write_case(out_dir: &std::path::Path, name: &str, params: &PairParams) {
@@ -144,9 +144,9 @@ fn main() {
     let mut p_off = base_profile();
     p_off.major_diameter = 16.0;
     p_off.pitch = 2.5;
-    let frame_x = smooth_fdm_threads::math::build_axis_frame([10.0, 20.0, 5.0], [1.0, 0.0, 0.0]).unwrap();
-    let g_off = smooth_fdm_threads::math::solve_groove(&p_off, smooth_fdm_threads::math::ThreadKind::External, false, 0.0).unwrap();
-    let mut off_cmds = vec![smooth_fdm_threads::commands::EngineCommand {
+    let frame_x = custom_threads::math::build_axis_frame([10.0, 20.0, 5.0], [1.0, 0.0, 0.0]).unwrap();
+    let g_off = custom_threads::math::solve_groove(&p_off, custom_threads::math::ThreadKind::External, false, 0.0).unwrap();
+    let mut off_cmds = vec![custom_threads::commands::EngineCommand {
         command: "solid.cylinder".into(),
         params: json!({
             "radius": 8.0,
@@ -158,7 +158,7 @@ fn main() {
             "name": "OffAxisBlank",
         }),
     }];
-    smooth_fdm_threads::commands::append_thread_commands(
+    custom_threads::commands::append_thread_commands(
         &mut off_cmds,
         "OffAxis",
         "OffAxisShaft",
@@ -166,7 +166,7 @@ fn main() {
         &g_off,
         0.0,
         20.0,
-        smooth_fdm_threads::commands::EndCaps::default(),
+        custom_threads::commands::EndCaps::default(),
         p_off.end_chamfer,
     )
     .unwrap();

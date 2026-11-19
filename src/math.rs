@@ -301,6 +301,14 @@ fn compute_surface_stub(surface_fillet: f64, p: &ThreadProfileParams) -> f64 {
     surface_fillet * trim_factor + 0.02
 }
 
+/// Exact axial offset placing an internal mating groove centered over an external bolt tooth,
+/// accounting for asymmetric upper/lower flank angles.
+pub fn nut_axial_phase_offset(p: &ThreadProfileParams, depth: f64) -> f64 {
+    let tan_l = p.lower_flank_angle_deg.to_radians().tan();
+    let tan_u = p.upper_flank_angle_deg.to_radians().tan();
+    0.5 * p.pitch + 0.5 * depth * (tan_l - tan_u)
+}
+
 /// Solves a groove cut profile (`operation: "cut"`) for either an external shaft or internal bore.
 ///
 /// * `apply_clearance`: When `true` on `Internal`, opens the bore by `+radial_clearance` and widens
@@ -730,5 +738,46 @@ mod tests {
             detect_kind_from_mesh(&int_mesh, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 5.0, 0.0, 20.0),
             Some(ThreadKind::Internal)
         );
+    }
+
+    #[test]
+    fn asymmetric_buttress_pair_maintains_positive_flank_clearances() {
+        let mut p = sample_fdm_params();
+        p.major_diameter = 24.0;
+        p.pitch = 4.0;
+        p.upper_flank_angle_deg = 12.0;
+        p.lower_flank_angle_deg = 45.0;
+        p.radial_clearance = 0.25;
+        p.axial_clearance = 0.15;
+
+        let ext = solve_groove(&p, ThreadKind::External, false, 0.0).unwrap();
+        let nut_phase = nut_axial_phase_offset(&p, ext.thread_depth);
+        let int = solve_groove(&p, ThreadKind::Internal, true, nut_phase).unwrap();
+
+        let tan_u = p.upper_flank_angle_deg.to_radians().tan();
+        let tan_l = p.lower_flank_angle_deg.to_radians().tan();
+        let tooth_crest_center = 0.5 * (ext.polygon[0][1] + (p.pitch + ext.polygon[3][1]));
+        assert!((tooth_crest_center - nut_phase).abs() < 1e-9);
+
+        for i in 0..=10 {
+            let frac = i as f64 / 10.0;
+            let r = ext.minor_radius + frac * ext.thread_depth;
+            let bolt_z_hi = tooth_crest_center + 0.5 * p.crest_flat + (ext.major_radius - r) * tan_u;
+            let bolt_z_lo = tooth_crest_center - 0.5 * p.crest_flat - (ext.major_radius - r) * tan_l;
+
+            let nut_z_hi = nut_phase + 0.5 * (p.crest_flat + p.axial_clearance) + (int.major_radius - r) * tan_u;
+            let nut_z_lo = nut_phase - 0.5 * (p.crest_flat + p.axial_clearance) - (int.major_radius - r) * tan_l;
+
+            let gap_hi = nut_z_hi - bolt_z_hi;
+            let gap_lo = bolt_z_lo - nut_z_lo;
+            assert!(
+                (gap_hi - (0.5 * p.axial_clearance + p.radial_clearance * tan_u)).abs() < 1e-9,
+                "unexpected upper gap at frac={frac}: {gap_hi}"
+            );
+            assert!(
+                (gap_lo - (0.5 * p.axial_clearance + p.radial_clearance * tan_l)).abs() < 1e-9,
+                "unexpected lower gap at frac={frac}: {gap_lo}"
+            );
+        }
     }
 }

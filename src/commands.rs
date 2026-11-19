@@ -357,12 +357,8 @@ pub fn build_named_thread_pair_commands(
     }
 
     let bolt_groove = solve_groove(&p.profile, ThreadKind::External, false, 0.0)?;
-    let nut_groove = solve_groove(
-        &p.profile,
-        ThreadKind::Internal,
-        true,
-        0.5 * p.profile.pitch,
-    )?;
+    let nut_phase = crate::math::nut_axial_phase_offset(&p.profile, bolt_groove.thread_depth);
+    let nut_groove = solve_groove(&p.profile, ThreadKind::Internal, true, nut_phase)?;
 
     let mut cmds = Vec::new();
     let frame_bolt = build_axis_frame([0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
@@ -607,4 +603,1251 @@ pub fn inspect_target_cylinder(
     });
 
     Ok((face_name, frame, radius, z_min, z_max, end_caps, detected))
+}
+
+/// Validates an explicit user-supplied `param_prefix` (must match `[A-Za-z][A-Za-z0-9_]*`).
+pub fn validate_param_prefix(raw: &str) -> Result<String, ValidationError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.len() > 24 {
+        return Err(ValidationError::new(
+            "param_prefix",
+            "param_prefix must be 1-24 characters starting with a letter",
+        ));
+    }
+    let mut chars = trimmed.chars();
+    let first = chars.next().unwrap();
+    if !first.is_ascii_alphabetic()
+        || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err(ValidationError::new(
+            "param_prefix",
+            "param_prefix must start with a letter and contain only letters, digits, or '_'",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Allocates a unique parameter prefix (`t1`, `t2`, ...) or validates `requested` against existing parameters.
+pub fn allocate_param_prefix(
+    requested: Option<&str>,
+    params_list: &Value,
+) -> Result<String, ValidationError> {
+    let existing: Vec<String> = params_list
+        .get("parameters")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.get("name").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let in_use = |cand: &str| {
+        let dotted = format!("{cand}_");
+        existing.iter().any(|n| n == cand || n.starts_with(&dotted))
+    };
+
+    if let Some(req) = requested.map(str::trim).filter(|s| !s.is_empty()) {
+        let valid = validate_param_prefix(req)?;
+        if in_use(&valid) {
+            return Err(ValidationError::new(
+                "param_prefix",
+                format!("Parameter prefix '{valid}' is already in use in this design"),
+            ));
+        }
+        return Ok(valid);
+    }
+
+    let mut idx = 1usize;
+    loop {
+        let candidate = format!("t{idx}");
+        if !in_use(&candidate) {
+            return Ok(candidate);
+        }
+        idx += 1;
+    }
+}
+
+/// Persistent JSON metadata stored inside `<prefix>_meta` so `edit-thread` can inspect and mutate a thread.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ThreadMeta {
+    pub v: u32,
+    pub prefix: String,
+    pub kind: String,
+    pub bodies: Vec<String>,
+    pub coils: Vec<String>,
+    pub chamfers: Vec<String>,
+    #[serde(default)]
+    pub offset_feature: Option<String>,
+    #[serde(default)]
+    pub group_id: Option<u64>,
+    pub apply_clearance: bool,
+    pub has_crest_fillet: bool,
+    pub has_root_fillet: bool,
+    pub has_major_d: bool,
+    pub has_nut_wall: bool,
+    pub has_spacing: bool,
+    pub left_hand: bool,
+    pub end_chamfer: String,
+    #[serde(default)]
+    pub face_span: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ThreadFeatures {
+    pub offset_feature: Option<String>,
+    pub sketch: String,
+    pub coil: String,
+    pub starts_pattern: String,
+    pub chamfer_sketch: Option<String>,
+    pub chamfer: Option<String>,
+}
+
+impl ThreadFeatures {
+    pub fn features_in_order(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(off) = &self.offset_feature {
+            out.push(off.clone());
+        }
+        out.push(self.sketch.clone());
+        out.push(self.coil.clone());
+        out.push(self.starts_pattern.clone());
+        if let Some(cs) = &self.chamfer_sketch {
+            out.push(cs.clone());
+        }
+        if let Some(ch) = &self.chamfer {
+            out.push(ch.clone());
+        }
+        out
+    }
+}
+
+fn add_param(
+    cmds: &mut Vec<EngineCommand>,
+    name: impl Into<String>,
+    expression: impl Into<String>,
+    unit: &str,
+    favorite: bool,
+    comment: &str,
+) {
+    cmds.push(EngineCommand {
+        command: "parameters.add".into(),
+        params: json!({
+            "name": name.into(),
+            "expression": expression.into(),
+            "unit": unit,
+            "favorite": favorite,
+            "comment": comment,
+        }),
+    });
+}
+
+fn push_common_parameters(
+    cmds: &mut Vec<EngineCommand>,
+    p_prefix: &str,
+    prof: &ThreadProfileParams,
+    include_major_d: bool,
+    include_clearances: bool,
+    include_nut_wall: Option<f64>,
+    include_spacing: Option<f64>,
+    base_radius: Option<f64>,
+) {
+    let mut n = 1usize;
+    let mut next_comment = |label: &str| {
+        let c = format!("{n}. {label}");
+        n += 1;
+        c
+    };
+
+    if include_major_d {
+        add_param(
+            cmds,
+            format!("{p_prefix}_major_d"),
+            format!("{:.6} mm", prof.major_diameter),
+            "mm",
+            true,
+            &next_comment("Major Diameter"),
+        );
+    }
+    add_param(
+        cmds,
+        format!("{p_prefix}_pitch"),
+        format!("{:.6} mm", prof.pitch),
+        "mm",
+        true,
+        &next_comment("Pitch"),
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_length"),
+        format!("{:.6} mm", prof.length),
+        "mm",
+        true,
+        &next_comment("Length"),
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_starts"),
+        format!("{}", prof.starts),
+        "",
+        true,
+        &next_comment("Starts (1-8)"),
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_upper_ang"),
+        format!("{:.6} deg", prof.upper_flank_angle_deg),
+        "deg",
+        true,
+        &next_comment("Upper Flank Angle"),
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_lower_ang"),
+        format!("{:.6} deg", prof.lower_flank_angle_deg),
+        "deg",
+        true,
+        &next_comment("Lower Flank Angle"),
+    );
+    if include_clearances {
+        add_param(
+            cmds,
+            format!("{p_prefix}_radial_clr"),
+            format!("{:.6} mm", prof.radial_clearance),
+            "mm",
+            true,
+            &next_comment("Radial Clearance"),
+        );
+        add_param(
+            cmds,
+            format!("{p_prefix}_axial_clr"),
+            format!("{:.6} mm", prof.axial_clearance),
+            "mm",
+            true,
+            &next_comment("Axial Backlash"),
+        );
+    }
+    add_param(
+        cmds,
+        format!("{p_prefix}_crest_flat"),
+        format!("{:.6} mm", prof.crest_flat),
+        "mm",
+        true,
+        &next_comment("Crest Flat"),
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_root_flat"),
+        format!("{:.6} mm", prof.root_flat),
+        "mm",
+        true,
+        &next_comment("Root Flat"),
+    );
+    let has_crest = prof.crest_fillet > 1e-6;
+    let has_root = prof.root_fillet > 1e-6;
+    if has_crest {
+        add_param(
+            cmds,
+            format!("{p_prefix}_crest_fillet"),
+            format!("{:.6} mm", prof.crest_fillet),
+            "mm",
+            true,
+            &next_comment("Crest Fillet"),
+        );
+    }
+    if has_root {
+        add_param(
+            cmds,
+            format!("{p_prefix}_root_fillet"),
+            format!("{:.6} mm", prof.root_fillet),
+            "mm",
+            true,
+            &next_comment("Root Fillet"),
+        );
+    }
+    if let Some(wall) = include_nut_wall {
+        add_param(
+            cmds,
+            format!("{p_prefix}_nut_wall"),
+            format!("{wall:.6} mm"),
+            "mm",
+            true,
+            &next_comment("Nut Wall Thickness"),
+        );
+    }
+    if let Some(spacing) = include_spacing {
+        add_param(
+            cmds,
+            format!("{p_prefix}_spacing"),
+            format!("{spacing:.6} mm"),
+            "mm",
+            true,
+            &next_comment("Pair Spacing"),
+        );
+    }
+
+    // Derived non-favorite formulas driving sketches and features.
+    add_param(
+        cmds,
+        format!("{p_prefix}_depth"),
+        format!(
+            "({p_prefix}_pitch - {p_prefix}_crest_flat - {p_prefix}_root_flat) / (tan({p_prefix}_upper_ang) + tan({p_prefix}_lower_ang))"
+        ),
+        "mm",
+        false,
+        "Derived nominal thread depth",
+    );
+    add_param(
+        cmds,
+        format!("{p_prefix}_chamfer"),
+        format!("min(0.95 * {p_prefix}_depth, 0.25 * {p_prefix}_length)"),
+        "mm",
+        false,
+        "Derived lead-in chamfer depth",
+    );
+    if let Some(r0) = base_radius {
+        add_param(
+            cmds,
+            format!("{p_prefix}_base_r"),
+            format!("{r0:.6} mm"),
+            "mm",
+            false,
+            "Picked cylinder base radius",
+        );
+    }
+    if has_crest || has_root {
+        add_param(
+            cmds,
+            format!("{p_prefix}_bu"),
+            format!("(90 deg - {p_prefix}_upper_ang) / 2"),
+            "deg",
+            false,
+            "Upper flank complement half-angle",
+        );
+        add_param(
+            cmds,
+            format!("{p_prefix}_bl"),
+            format!("(90 deg - {p_prefix}_lower_ang) / 2"),
+            "deg",
+            false,
+            "Lower flank complement half-angle",
+        );
+        if has_crest {
+            add_param(
+                cmds,
+                format!("{p_prefix}_tcu"),
+                format!("{p_prefix}_crest_fillet * tan({p_prefix}_bu)"),
+                "mm",
+                false,
+                "Crest upper tangent trim",
+            );
+            add_param(
+                cmds,
+                format!("{p_prefix}_tcl"),
+                format!("{p_prefix}_crest_fillet * tan({p_prefix}_bl)"),
+                "mm",
+                false,
+                "Crest lower tangent trim",
+            );
+        }
+        if has_root {
+            add_param(
+                cmds,
+                format!("{p_prefix}_tru"),
+                format!("{p_prefix}_root_fillet * tan({p_prefix}_bu)"),
+                "mm",
+                false,
+                "Root upper tangent trim",
+            );
+            add_param(
+                cmds,
+                format!("{p_prefix}_trl"),
+                format!("{p_prefix}_root_fillet * tan({p_prefix}_bl)"),
+                "mm",
+                false,
+                "Root lower tangent trim",
+            );
+        }
+    }
+}
+
+pub fn build_pair_parameter_commands(prefix: &str, p: &PairParams) -> Vec<EngineCommand> {
+    let mut cmds = Vec::new();
+    let include_nut_wall = matches!(p.generate, PairMode::Pair | PairMode::Nut)
+        .then_some(p.nut_wall_thickness);
+    let include_spacing = (p.generate == PairMode::Pair && !p.coaxial_overlay)
+        .then_some(p.pair_spacing);
+    let include_clearances = p.generate != PairMode::Bolt;
+    push_common_parameters(
+        &mut cmds,
+        prefix,
+        &p.profile,
+        true,
+        include_clearances,
+        include_nut_wall,
+        include_spacing,
+        None,
+    );
+    cmds
+}
+
+pub fn build_apply_parameter_commands(
+    prefix: &str,
+    prof: &ThreadProfileParams,
+    base_radius: f64,
+    include_clearances: bool,
+) -> Vec<EngineCommand> {
+    let mut cmds = Vec::new();
+    push_common_parameters(
+        &mut cmds,
+        prefix,
+        prof,
+        false,
+        include_clearances,
+        None,
+        None,
+        Some(base_radius),
+    );
+    cmds
+}
+
+#[derive(Clone, Debug)]
+pub enum ParametricRadialSource {
+    /// Pair Bolt or External non-clearance cylinder using `<p>_major_d / 2`.
+    MajorDiameterNominal,
+    /// Pair Nut using `<p>_major_d / 2 - <p>_depth + <p>_radial_clr` bore.
+    NutWithClearance,
+    /// `apply-thread` using `<p>_base_r` with optional clearance offset.
+    PickedRadius { apply_clearance: bool },
+}
+
+#[derive(Clone, Debug)]
+pub enum ParametricAnchor {
+    StartFixed(f64),
+    EndFixed(f64),
+}
+
+#[derive(Clone, Debug)]
+pub struct ParametricThreadSpec {
+    pub tag: String,
+    pub prefix: String,
+    pub body: String,
+    pub frame: AxisFrame,
+    pub origin_expr: Option<[String; 3]>,
+    pub kind: ThreadKind,
+    pub radial_source: ParametricRadialSource,
+    pub phase_half_pitch: bool,
+    pub anchor: ParametricAnchor,
+    pub ends: EndCaps,
+    pub end_chamfer: EndChamfer,
+    pub left_hand: bool,
+    pub has_crest_fillet: bool,
+    pub has_root_fillet: bool,
+}
+
+fn origin_json(frame: &AxisFrame, origin_expr: &Option<[String; 3]>) -> Value {
+    match origin_expr {
+        Some([x, y, z]) => json!([x, y, z]),
+        None => json!(frame.origin),
+    }
+}
+
+struct CornerFilletExpr {
+    radius: String,
+    half_angle: String,
+    trim: String,
+    flank_angle: String,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_parametric_groove_commands(
+    cmds: &mut Vec<EngineCommand>,
+    s: &ParametricThreadSpec,
+    r_surf: &str,
+    r_deep: &str,
+    r_air: &str,
+    bottom_flat: &str,
+    z_center_expr: &str,
+) {
+    let p = &s.prefix;
+    let is_ext = s.kind == ThreadKind::External;
+    let s_surf = if is_ext { "-" } else { "+" };
+    let s_deep = if is_ext { "+" } else { "-" };
+
+    let (ang_hi, ang_lo, b_hi, b_lo) = if is_ext {
+        (
+            format!("{p}_lower_ang"),
+            format!("{p}_upper_ang"),
+            format!("{p}_bl"),
+            format!("{p}_bu"),
+        )
+    } else {
+        (
+            format!("{p}_upper_ang"),
+            format!("{p}_lower_ang"),
+            format!("{p}_bu"),
+            format!("{p}_bl"),
+        )
+    };
+
+    let (has_b, has_s, surf_hi_f, deep_hi_f, deep_lo_f, surf_lo_f) = if is_ext {
+        (
+            s.has_root_fillet,
+            s.has_crest_fillet,
+            CornerFilletExpr {
+                radius: format!("{p}_crest_fillet"),
+                half_angle: b_hi.clone(),
+                trim: format!("{p}_tcl"),
+                flank_angle: ang_hi.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_root_fillet"),
+                half_angle: b_hi.clone(),
+                trim: format!("{p}_trl"),
+                flank_angle: ang_hi.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_root_fillet"),
+                half_angle: b_lo.clone(),
+                trim: format!("{p}_tru"),
+                flank_angle: ang_lo.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_crest_fillet"),
+                half_angle: b_lo.clone(),
+                trim: format!("{p}_tcu"),
+                flank_angle: ang_lo.clone(),
+            },
+        )
+    } else {
+        (
+            s.has_crest_fillet,
+            s.has_root_fillet,
+            CornerFilletExpr {
+                radius: format!("{p}_root_fillet"),
+                half_angle: b_hi.clone(),
+                trim: format!("{p}_tru"),
+                flank_angle: ang_hi.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_crest_fillet"),
+                half_angle: b_hi.clone(),
+                trim: format!("{p}_tcu"),
+                flank_angle: ang_hi.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_crest_fillet"),
+                half_angle: b_lo.clone(),
+                trim: format!("{p}_tcl"),
+                flank_angle: ang_lo.clone(),
+            },
+            CornerFilletExpr {
+                radius: format!("{p}_root_fillet"),
+                half_angle: b_lo.clone(),
+                trim: format!("{p}_trl"),
+                flank_angle: ang_lo.clone(),
+            },
+        )
+    };
+
+    let depth = format!("{p}_depth");
+    let z_dhi = format!("({z_center_expr}) + 0.5 * ({bottom_flat})");
+    let z_dlo = format!("({z_center_expr}) - 0.5 * ({bottom_flat})");
+    let z_shi = format!("({z_dhi}) + {depth} * tan({ang_hi})");
+    let z_slo = format!("({z_dlo}) - {depth} * tan({ang_lo})");
+
+    let mut pending_pts: Vec<Value> = Vec::new();
+    let mut prev_ref: Option<String> = None;
+    let mut first_ref: Option<String> = None;
+    let mut line_idx = 0usize;
+    let mut arc_idx = 0usize;
+
+    let flush_line = |cmds: &mut Vec<EngineCommand>,
+                      pts_buf: &mut Vec<Value>,
+                      extra_end: Option<Value>,
+                      close_to_first: bool,
+                      prev_ref: &mut Option<String>,
+                      first_ref: &mut Option<String>,
+                      line_idx: &mut usize| {
+        if pts_buf.is_empty() && extra_end.is_none() && !close_to_first {
+            return;
+        }
+        let mut pts = Vec::new();
+        let closed = if let Some(pr) = prev_ref.as_ref() {
+            pts.push(json!(pr));
+            false
+        } else {
+            false
+        };
+        pts.append(pts_buf);
+        if let Some(ex) = extra_end {
+            pts.push(ex);
+        }
+        let use_closed_flag = if close_to_first {
+            if let Some(fr) = first_ref.as_ref() {
+                pts.push(json!(fr));
+                false
+            } else {
+                true
+            }
+        } else {
+            closed
+        };
+        let n_seg = if use_closed_flag {
+            pts.len()
+        } else {
+            pts.len().saturating_sub(1)
+        };
+        if n_seg == 0 {
+            return;
+        }
+        let first_line_id = *line_idx + 1;
+        *line_idx += n_seg;
+        let last_line_id = *line_idx;
+        if first_ref.is_none() {
+            *first_ref = Some(format!("l{first_line_id}.start"));
+        }
+        *prev_ref = Some(format!("l{last_line_id}.end"));
+        let mut params = json!({ "points": pts });
+        if use_closed_flag {
+            params["closed"] = json!(true);
+        }
+        cmds.push(EngineCommand {
+            command: "sketch.line".into(),
+            params,
+        });
+    };
+
+    let emit_arc = |cmds: &mut Vec<EngineCommand>,
+                    pts_buf: &mut Vec<Value>,
+                    start_pt: Value,
+                    through_pt: Value,
+                    end_pt: Value,
+                    prev_ref: &mut Option<String>,
+                    first_ref: &mut Option<String>,
+                    line_idx: &mut usize,
+                    arc_idx: &mut usize| {
+        let start_val = if !pts_buf.is_empty() || prev_ref.is_some() {
+            flush_line(
+                cmds,
+                pts_buf,
+                Some(start_pt.clone()),
+                false,
+                prev_ref,
+                first_ref,
+                line_idx,
+            );
+            json!(prev_ref.as_ref().expect("prev_ref after flush"))
+        } else {
+            start_pt
+        };
+        *arc_idx += 1;
+        let a_id = format!("a{}", *arc_idx);
+        if first_ref.is_none() {
+            *first_ref = Some(format!("{a_id}.start"));
+        }
+        *prev_ref = Some(format!("{a_id}.end"));
+        cmds.push(EngineCommand {
+            command: "sketch.arc.three_point".into(),
+            params: json!({
+                "start": start_val,
+                "through": through_pt,
+                "end": end_pt,
+            }),
+        });
+    };
+
+    // Corner 0: surf_hi
+    if has_s {
+        let start = json!([r_surf, format!("({z_shi}) + {}", surf_hi_f.trim)]);
+        let through = json!([
+            format!("({r_surf}) {s_surf} {} * (1 - cos({}))", surf_hi_f.radius, surf_hi_f.half_angle),
+            format!("({z_shi}) + {} - {} * sin({})", surf_hi_f.trim, surf_hi_f.radius, surf_hi_f.half_angle)
+        ]);
+        let end = json!([
+            format!("({r_surf}) {s_surf} {} * cos({})", surf_hi_f.trim, surf_hi_f.flank_angle),
+            format!("({z_shi}) - {} * sin({})", surf_hi_f.trim, surf_hi_f.flank_angle)
+        ]);
+        emit_arc(
+            cmds,
+            &mut pending_pts,
+            start,
+            through,
+            end,
+            &mut prev_ref,
+            &mut first_ref,
+            &mut line_idx,
+            &mut arc_idx,
+        );
+    } else {
+        pending_pts.push(json!([r_surf, z_shi]));
+    }
+
+    // Corner 1: deep_hi
+    if has_b {
+        let start = json!([
+            format!("({r_deep}) {s_deep} {} * cos({})", deep_hi_f.trim, deep_hi_f.flank_angle),
+            format!("({z_dhi}) + {} * sin({})", deep_hi_f.trim, deep_hi_f.flank_angle)
+        ]);
+        let through = json!([
+            format!("({r_deep}) {s_deep} {} * (1 - cos({}))", deep_hi_f.radius, deep_hi_f.half_angle),
+            format!("({z_dhi}) - {} + {} * sin({})", deep_hi_f.trim, deep_hi_f.radius, deep_hi_f.half_angle)
+        ]);
+        let end = json!([r_deep, format!("({z_dhi}) - {}", deep_hi_f.trim)]);
+        emit_arc(
+            cmds,
+            &mut pending_pts,
+            start,
+            through,
+            end,
+            &mut prev_ref,
+            &mut first_ref,
+            &mut line_idx,
+            &mut arc_idx,
+        );
+    } else {
+        pending_pts.push(json!([r_deep, z_dhi]));
+    }
+
+    // Corner 2: deep_lo
+    if has_b {
+        let start = json!([r_deep, format!("({z_dlo}) + {}", deep_lo_f.trim)]);
+        let through = json!([
+            format!("({r_deep}) {s_deep} {} * (1 - cos({}))", deep_lo_f.radius, deep_lo_f.half_angle),
+            format!("({z_dlo}) + {} - {} * sin({})", deep_lo_f.trim, deep_lo_f.radius, deep_lo_f.half_angle)
+        ]);
+        let end = json!([
+            format!("({r_deep}) {s_deep} {} * cos({})", deep_lo_f.trim, deep_lo_f.flank_angle),
+            format!("({z_dlo}) - {} * sin({})", deep_lo_f.trim, deep_lo_f.flank_angle)
+        ]);
+        emit_arc(
+            cmds,
+            &mut pending_pts,
+            start,
+            through,
+            end,
+            &mut prev_ref,
+            &mut first_ref,
+            &mut line_idx,
+            &mut arc_idx,
+        );
+    } else {
+        pending_pts.push(json!([r_deep, z_dlo]));
+    }
+
+    // Corner 3: surf_lo
+    if has_s {
+        let start = json!([
+            format!("({r_surf}) {s_surf} {} * cos({})", surf_lo_f.trim, surf_lo_f.flank_angle),
+            format!("({z_slo}) + {} * sin({})", surf_lo_f.trim, surf_lo_f.flank_angle)
+        ]);
+        let through = json!([
+            format!("({r_surf}) {s_surf} {} * (1 - cos({}))", surf_lo_f.radius, surf_lo_f.half_angle),
+            format!("({z_slo}) - {} + {} * sin({})", surf_lo_f.trim, surf_lo_f.radius, surf_lo_f.half_angle)
+        ]);
+        let end = json!([r_surf, format!("({z_slo}) - {}", surf_lo_f.trim)]);
+        emit_arc(
+            cmds,
+            &mut pending_pts,
+            start,
+            through,
+            end,
+            &mut prev_ref,
+            &mut first_ref,
+            &mut line_idx,
+            &mut arc_idx,
+        );
+    } else {
+        pending_pts.push(json!([r_surf, z_slo]));
+    }
+
+    // Air relief points matched in Z to outer loop entry/exit
+    let z_outer_lo = if has_s {
+        format!("({z_slo}) - {}", surf_lo_f.trim)
+    } else {
+        z_slo
+    };
+    let z_outer_hi = if has_s {
+        format!("({z_shi}) + {}", surf_hi_f.trim)
+    } else {
+        z_shi
+    };
+    pending_pts.push(json!([r_air, z_outer_lo]));
+    pending_pts.push(json!([r_air, z_outer_hi]));
+    flush_line(
+        cmds,
+        &mut pending_pts,
+        None,
+        true,
+        &mut prev_ref,
+        &mut first_ref,
+        &mut line_idx,
+    );
+}
+
+/// Emits expression-driven 0-DOF sketches, coil, circular starts pattern (for live starts edits),
+/// and optional revolved end chamfers. Returns created feature names for `timeline.group` and `edit-thread`.
+pub fn append_parametric_thread_commands(
+    cmds: &mut Vec<EngineCommand>,
+    s: &ParametricThreadSpec,
+) -> Result<ThreadFeatures, ValidationError> {
+    let p = &s.prefix;
+    let is_ext = s.kind == ThreadKind::External;
+
+    let (r_surf, r_deep, r_air, bottom_flat) = match (&s.radial_source, s.kind) {
+        (ParametricRadialSource::MajorDiameterNominal, ThreadKind::External) => (
+            format!("{p}_major_d / 2"),
+            format!("{p}_major_d / 2 - {p}_depth"),
+            format!("{p}_major_d / 2 + 0.2 mm"),
+            format!("{p}_root_flat"),
+        ),
+        (ParametricRadialSource::NutWithClearance, ThreadKind::Internal) => (
+            format!("{p}_major_d / 2 - {p}_depth + {p}_radial_clr"),
+            format!("{p}_major_d / 2 + {p}_radial_clr"),
+            format!("max(0.05 mm, {p}_major_d / 2 - {p}_depth + {p}_radial_clr - 0.2 mm)"),
+            format!("{p}_crest_flat + {p}_axial_clr"),
+        ),
+        (ParametricRadialSource::PickedRadius { apply_clearance }, ThreadKind::External) => {
+            if *apply_clearance {
+                (
+                    format!("{p}_base_r - {p}_radial_clr"),
+                    format!("{p}_base_r - {p}_radial_clr - {p}_depth"),
+                    format!("{p}_base_r - {p}_radial_clr + 0.2 mm"),
+                    format!("{p}_root_flat + {p}_axial_clr"),
+                )
+            } else {
+                (
+                    format!("{p}_base_r"),
+                    format!("{p}_base_r - {p}_depth"),
+                    format!("{p}_base_r + 0.2 mm"),
+                    format!("{p}_root_flat"),
+                )
+            }
+        }
+        (ParametricRadialSource::PickedRadius { .. }, ThreadKind::Internal) => (
+            format!("{p}_base_r + {p}_radial_clr"),
+            format!("{p}_base_r + {p}_radial_clr + {p}_depth"),
+            format!("max(0.05 mm, {p}_base_r + {p}_radial_clr - 0.2 mm)"),
+            format!("{p}_crest_flat + {p}_axial_clr"),
+        ),
+        _ => {
+            return Err(ValidationError::new(
+                "kind",
+                "Unsupported radial source for thread kind",
+            ));
+        }
+    };
+
+    let (z_lo, z_hi) = match s.anchor {
+        ParametricAnchor::StartFixed(z0) => {
+            if z0.abs() < 1e-9 {
+                ("0 mm".to_string(), format!("{p}_length"))
+            } else {
+                (format!("{z0:.6} mm"), format!("{z0:.6} mm + {p}_length"))
+            }
+        }
+        ParametricAnchor::EndFixed(z1) => (
+            format!("{z1:.6} mm - {p}_length"),
+            format!("{z1:.6} mm"),
+        ),
+    };
+
+    let lead_expr = format!("{p}_pitch * {p}_starts");
+    let surf_fillet_active = if is_ext { s.has_crest_fillet } else { s.has_root_fillet };
+    let stub_expr = if surf_fillet_active {
+        if is_ext {
+            format!("max({p}_tcu, {p}_tcl) + 0.02 mm")
+        } else {
+            format!("max({p}_tru, {p}_trl) + 0.02 mm")
+        }
+    } else {
+        "0 mm".to_string()
+    };
+    let blocked_pad = format!(
+        "-(0.5 * ({bottom_flat} + {p}_depth * (tan({p}_upper_ang) + tan({p}_lower_ang))) + {stub_expr} + 0.05 mm)"
+    );
+    let start_pad = if s.ends.start_free {
+        lead_expr.clone()
+    } else {
+        blocked_pad.clone()
+    };
+    let end_pad = if s.ends.end_free {
+        lead_expr.clone()
+    } else {
+        blocked_pad
+    };
+
+    let z_coil_start = if s.ends.start_free && matches!(s.anchor, ParametricAnchor::StartFixed(z0) if z0.abs() < 1e-9) {
+        format!("-({lead_expr})")
+    } else {
+        format!("({z_lo}) - ({start_pad})")
+    };
+    let revolutions = if s.ends.start_free && s.ends.end_free {
+        format!("{p}_length / ({lead_expr}) + 2")
+    } else {
+        format!("(({z_hi}) + ({end_pad}) - ({z_coil_start})) / ({lead_expr})")
+    };
+
+    let z_center_expr = if s.phase_half_pitch {
+        format!(
+            "({z_coil_start}) + 0.5 * {p}_pitch + 0.5 * {p}_depth * (tan({p}_lower_ang) - tan({p}_upper_ang))"
+        )
+    } else {
+        z_coil_start
+    };
+
+    let origin_val = origin_json(&s.frame, &s.origin_expr);
+    let sketch_name = format!("{}_Profile", s.tag);
+    let coil_name = format!("{}_Coil", s.tag);
+    let pattern_name = format!("{}_Starts", s.tag);
+
+    cmds.push(EngineCommand {
+        command: "sketch.create".into(),
+        params: json!({
+            "plane": {
+                "origin": origin_val.clone(),
+                "x_dir": s.frame.x_dir,
+                "y_dir": s.frame.axis,
+            },
+            "name": sketch_name,
+        }),
+    });
+
+    build_parametric_groove_commands(
+        cmds,
+        s,
+        &r_surf,
+        &r_deep,
+        &r_air,
+        &bottom_flat,
+        &z_center_expr,
+    );
+
+    cmds.push(EngineCommand {
+        command: "sketch.finish".into(),
+        params: json!({}),
+    });
+
+    cmds.push(EngineCommand {
+        command: "solid.coil".into(),
+        params: json!({
+            "sketch": sketch_name,
+            "pitch": lead_expr,
+            "revolutions": revolutions,
+            "base": origin_val.clone(),
+            "axis": s.frame.axis,
+            "clockwise": s.left_hand,
+            "operation": "cut",
+            "targets": [s.body],
+            "name": coil_name,
+        }),
+    });
+
+    cmds.push(EngineCommand {
+        command: "browser.visibility".into(),
+        params: json!({
+            "items": [sketch_name],
+            "visible": false,
+        }),
+    });
+
+    cmds.push(EngineCommand {
+        command: "solid.pattern.circular".into(),
+        params: json!({
+            "features": [coil_name],
+            "axis": {
+                "origin": origin_val.clone(),
+                "dir": s.frame.axis,
+            },
+            "count": format!("{p}_starts"),
+            "name": pattern_name,
+        }),
+    });
+
+    let mut chamfer_sketch_out = None;
+    let mut chamfer_out = None;
+    if s.end_chamfer != EndChamfer::None && (s.ends.start_free || (s.ends.end_free && s.end_chamfer == EndChamfer::Both)) {
+        let cut_start = s.ends.start_free;
+        let cut_end = s.ends.end_free && s.end_chamfer == EndChamfer::Both;
+        let cs_name = format!("{}_ChamferSketch", s.tag);
+        let ch_name = format!("{}_Chamfer", s.tag);
+
+        cmds.push(EngineCommand {
+            command: "sketch.create".into(),
+            params: json!({
+                "plane": {
+                    "origin": origin_val.clone(),
+                    "x_dir": s.frame.x_dir,
+                    "y_dir": s.frame.axis,
+                },
+                "name": cs_name,
+            }),
+        });
+
+        let cham = format!("{p}_chamfer");
+        let (r_in, r_out) = if is_ext {
+            (
+                format!("max(0.2 mm, ({r_surf}) - {cham})"),
+                format!("({r_surf}) + 0.2 mm"),
+            )
+        } else {
+            (
+                format!("max(0.05 mm, ({r_surf}) - 0.2 mm)"),
+                format!("({r_surf}) + {cham}"),
+            )
+        };
+
+        if cut_start {
+            let z_out = if z_lo == "0 mm" {
+                "-0.2 mm".to_string()
+            } else {
+                format!("({z_lo}) - 0.2 mm")
+            };
+            let z_in = if z_lo == "0 mm" {
+                cham.clone()
+            } else {
+                format!("({z_lo}) + {cham}")
+            };
+            let pts = if is_ext {
+                json!([[r_in, z_out], [r_out, z_out], [r_out, z_in]])
+            } else {
+                json!([[r_in, z_out], [r_out, z_out], [r_in, z_in]])
+            };
+            cmds.push(EngineCommand {
+                command: "sketch.line".into(),
+                params: json!({ "points": pts, "closed": true }),
+            });
+        }
+
+        if cut_end {
+            let z_out = format!("({z_hi}) + 0.2 mm");
+            let z_in = format!("({z_hi}) - {cham}");
+            let pts = if is_ext {
+                json!([[r_in, z_out], [r_out, z_out], [r_out, z_in]])
+            } else {
+                json!([[r_in, z_out], [r_out, z_out], [r_in, z_in]])
+            };
+            cmds.push(EngineCommand {
+                command: "sketch.line".into(),
+                params: json!({ "points": pts, "closed": true }),
+            });
+        }
+
+        cmds.push(EngineCommand {
+            command: "sketch.finish".into(),
+            params: json!({}),
+        });
+
+        cmds.push(EngineCommand {
+            command: "solid.revolve".into(),
+            params: json!({
+                "sketch": cs_name,
+                "axis": {
+                    "origin": origin_val,
+                    "dir": s.frame.axis,
+                },
+                "angle": "360 deg",
+                "operation": "cut",
+                "targets": [s.body],
+                "name": ch_name,
+            }),
+        });
+
+        chamfer_sketch_out = Some(cs_name);
+        chamfer_out = Some(ch_name);
+    }
+
+    Ok(ThreadFeatures {
+        offset_feature: None,
+        sketch: sketch_name,
+        coil: coil_name,
+        starts_pattern: pattern_name,
+        chamfer_sketch: chamfer_sketch_out,
+        chamfer: chamfer_out,
+    })
+}
+
+pub struct ParametricPairBuild {
+    pub param_cmds: Vec<EngineCommand>,
+    pub bolt_cmds: Vec<EngineCommand>,
+    pub bolt_features: Vec<String>,
+    pub bolt_coil: Option<String>,
+    pub bolt_chamfer: Option<String>,
+    pub nut_cmds: Vec<EngineCommand>,
+    pub nut_features: Vec<String>,
+    pub nut_coil: Option<String>,
+    pub nut_chamfer: Option<String>,
+    pub bodies: Vec<String>,
+}
+
+/// Builds a parametric Bolt, Nut, or Bolt+Nut pair separated cleanly into parameters, Bolt features,
+/// and Nut features so callers can wrap them into nested `timeline.group` folders.
+pub fn build_parametric_thread_pair(
+    prefix: &str,
+    p: &PairParams,
+    bolt_name: &str,
+    nut_name: &str,
+    tag_prefix: &str,
+) -> Result<ParametricPairBuild, ValidationError> {
+    if !p.nut_wall_thickness.is_finite() || p.nut_wall_thickness < 0.5 {
+        return Err(ValidationError::new(
+            "nut_wall_thickness",
+            "nut_wall_thickness must be >= 0.5 mm",
+        ));
+    }
+    if !p.pair_spacing.is_finite() || p.pair_spacing < 0.0 {
+        return Err(ValidationError::new(
+            "pair_spacing",
+            "pair_spacing must be >= 0 mm",
+        ));
+    }
+    let _ = crate::math::validate_and_depth(&p.profile)?;
+
+    let param_cmds = build_pair_parameter_commands(prefix, p);
+    let frame_bolt = build_axis_frame([0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+    let has_crest_fillet = p.profile.crest_fillet > 1e-6;
+    let has_root_fillet = p.profile.root_fillet > 1e-6;
+
+    let mut bolt_cmds = Vec::new();
+    let mut bolt_features = Vec::new();
+    let mut bolt_coil = None;
+    let mut bolt_chamfer = None;
+    let mut bodies = Vec::new();
+
+    if matches!(p.generate, PairMode::Pair | PairMode::Bolt) {
+        let bolt_tag = if tag_prefix.is_empty() {
+            "Bolt".to_string()
+        } else {
+            format!("{tag_prefix}_Bolt")
+        };
+        let blank = format!("{bolt_tag}Blank");
+        bolt_cmds.push(EngineCommand {
+            command: "solid.cylinder".into(),
+            params: json!({
+                "diameter": format!("{prefix}_major_d"),
+                "height": format!("{prefix}_length"),
+                "base": [0.0, 0.0, 0.0],
+                "axis": "Z",
+                "operation": "new",
+                "body_name": bolt_name,
+                "name": blank,
+            }),
+        });
+        bolt_features.push(blank);
+
+        let tf = append_parametric_thread_commands(
+            &mut bolt_cmds,
+            &ParametricThreadSpec {
+                tag: bolt_tag,
+                prefix: prefix.to_string(),
+                body: bolt_name.to_string(),
+                frame: frame_bolt,
+                origin_expr: None,
+                kind: ThreadKind::External,
+                radial_source: ParametricRadialSource::MajorDiameterNominal,
+                phase_half_pitch: false,
+                anchor: ParametricAnchor::StartFixed(0.0),
+                ends: EndCaps::default(),
+                end_chamfer: p.profile.end_chamfer,
+                left_hand: p.profile.left_hand,
+                has_crest_fillet,
+                has_root_fillet,
+            },
+        )?;
+        bolt_coil = Some(tf.coil.clone());
+        bolt_chamfer = tf.chamfer.clone();
+        bolt_features.extend(tf.features_in_order());
+        bodies.push(bolt_name.to_string());
+    }
+
+    let mut nut_cmds = Vec::new();
+    let mut nut_features = Vec::new();
+    let mut nut_coil = None;
+    let mut nut_chamfer = None;
+
+    if matches!(p.generate, PairMode::Pair | PairMode::Nut) {
+        let nut_tag = if tag_prefix.is_empty() {
+            "Nut".to_string()
+        } else {
+            format!("{tag_prefix}_Nut")
+        };
+        let (nut_origin_expr, bore_base_json, blank_base_json) =
+            if p.generate == PairMode::Pair && !p.coaxial_overlay {
+                let nx = format!("{prefix}_major_d + {prefix}_radial_clr + {prefix}_nut_wall + {prefix}_spacing");
+                (
+                    Some([nx.clone(), "0 mm".into(), "0 mm".into()]),
+                    json!([nx, "0 mm", "-1 mm"]),
+                    json!([nx, "0 mm", "0 mm"]),
+                )
+            } else {
+                (None, json!([0.0, 0.0, -1.0]), json!([0.0, 0.0, 0.0]))
+            };
+
+        let nut_blank = format!("{nut_tag}Blank");
+        let nut_bore = format!("{nut_tag}Bore");
+        nut_cmds.push(EngineCommand {
+            command: "solid.cylinder".into(),
+            params: json!({
+                "diameter": format!("{prefix}_major_d + 2 * {prefix}_radial_clr + 2 * {prefix}_nut_wall"),
+                "height": format!("{prefix}_length"),
+                "base": blank_base_json,
+                "axis": "Z",
+                "operation": "new",
+                "body_name": nut_name,
+                "name": nut_blank,
+            }),
+        });
+        nut_features.push(nut_blank);
+
+        nut_cmds.push(EngineCommand {
+            command: "solid.cylinder".into(),
+            params: json!({
+                "diameter": format!("{prefix}_major_d - 2 * {prefix}_depth + 2 * {prefix}_radial_clr"),
+                "height": format!("{prefix}_length + 2 mm"),
+                "base": bore_base_json,
+                "axis": "Z",
+                "operation": "cut",
+                "targets": [nut_name],
+                "name": nut_bore,
+            }),
+        });
+        nut_features.push(nut_bore);
+
+        let tf = append_parametric_thread_commands(
+            &mut nut_cmds,
+            &ParametricThreadSpec {
+                tag: nut_tag,
+                prefix: prefix.to_string(),
+                body: nut_name.to_string(),
+                frame: frame_bolt,
+                origin_expr: nut_origin_expr,
+                kind: ThreadKind::Internal,
+                radial_source: ParametricRadialSource::NutWithClearance,
+                phase_half_pitch: true,
+                anchor: ParametricAnchor::StartFixed(0.0),
+                ends: EndCaps::default(),
+                end_chamfer: p.profile.end_chamfer,
+                left_hand: p.profile.left_hand,
+                has_crest_fillet,
+                has_root_fillet,
+            },
+        )?;
+        nut_coil = Some(tf.coil.clone());
+        nut_chamfer = tf.chamfer.clone();
+        nut_features.extend(tf.features_in_order());
+        bodies.push(nut_name.to_string());
+    }
+
+    Ok(ParametricPairBuild {
+        param_cmds,
+        bolt_cmds,
+        bolt_features,
+        bolt_coil,
+        bolt_chamfer,
+        nut_cmds,
+        nut_features,
+        nut_coil,
+        nut_chamfer,
+        bodies,
+    })
 }

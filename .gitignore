@@ -6,3 +6,5 @@
 *.stp
 *.png
 *.sc
+!docs/images/*.png
+!docs/images/*.jpg

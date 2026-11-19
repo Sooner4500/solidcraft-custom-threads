@@ -1,9 +1,10 @@
 [package]
-name = "smooth_fdm_threads"
-version = "0.1.0"
+name = "custom_threads"
+version = "0.2.0"
 edition = "2024"
-description = "Smooth, low-triangle, FDM-printable custom threads for SolidCraft"
+description = "SolidCraft plugin for smooth, exact B-rep custom threads with arbitrary sizes, flank angles, clearances, multi-start leads, collapsed timeline folders, and live parameters."
 license = "MIT"
+repository = "https://github.com/Sooner4500/solidcraft-custom-threads"
 publish = false
 
 [lib]

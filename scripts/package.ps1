@@ -27,21 +27,20 @@ try {
         throw "cargo build failed with exit code $LASTEXITCODE"
     }
 
-    $rawWasm = Join-Path $repoRoot "target\wasm32-unknown-unknown\release\smooth_fdm_threads.wasm"
+    $rawWasm = Join-Path $repoRoot "target\wasm32-unknown-unknown\release\custom_threads.wasm"
     if (-not (Test-Path $rawWasm)) {
         throw "Missing raw wasm binary at $rawWasm"
     }
 
     $distRoot = Join-Path $repoRoot "dist"
-    $pkgDir = Join-Path $distRoot "smooth-fdm-threads"
+    $pkgDir = Join-Path $distRoot "custom-threads"
     $assetsOut = Join-Path $pkgDir "assets"
-    $zipPath = Join-Path $distRoot "smooth-fdm-threads.zip"
+    $zipPath = Join-Path $distRoot "custom-threads.zip"
 
-    if (Test-Path $pkgDir) {
-        Remove-Item $pkgDir -Recurse -Force
-    }
-    if (Test-Path $zipPath) {
-        Remove-Item $zipPath -Force
+    foreach ($stale in @((Join-Path $distRoot "smooth-fdm-threads"), (Join-Path $distRoot "smooth-fdm-threads.zip"), $pkgDir, $zipPath)) {
+        if (Test-Path $stale) {
+            Remove-Item $stale -Recurse -Force
+        }
     }
     New-Item -ItemType Directory -Force -Path $assetsOut | Out-Null
 
@@ -73,7 +72,7 @@ try {
         $relFiles = @("plugin.json", "plugin.wasm") + ($assetFiles | ForEach-Object { "assets/$($_.Name)" })
         foreach ($rel in $relFiles) {
             $src = Join-Path $pkgDir ($rel -replace "/", "\")
-            $entryName = "smooth-fdm-threads/$rel"
+            $entryName = "custom-threads/$rel"
             [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                 $zip,
                 $src,
