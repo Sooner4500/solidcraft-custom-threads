@@ -1,0 +1,8 @@
+/target
+/dist
+*.stl
+*.3mf
+*.step
+*.stp
+*.png
+*.sc
