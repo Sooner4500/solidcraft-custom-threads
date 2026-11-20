@@ -116,6 +116,11 @@ try {
     $zipSize = (Get-Item $zipPath).Length
     Write-Host "Packaged component: $wasmSize bytes | Zip: $zipSize bytes | SVGs: $($assetFiles.Count) | Test files: $($testFiles.Count)"
 
+    $releasesDir = Join-Path $repoRoot "releases"
+    New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
+    Copy-Item $zipPath (Join-Path $releasesDir "custom-threads.zip") -Force
+    Copy-Item $zipPath (Join-Path $releasesDir ("custom-threads-v" + $manifestObj.version + ".zip")) -Force
+
     $scCli = "C:\Program Files\SolidCraft\solidcraft-cli.exe"
     if (Test-Path $scCli) {
         Write-Host "Checking package with solidcraft-cli plugin check..."

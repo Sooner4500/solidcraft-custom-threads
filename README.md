@@ -2,6 +2,9 @@
 
 **Custom Threads** is a SolidCraft plugin for smooth, exact B-rep 3D-printable threads with built-in clearances, live parameters, and collapsed timeline folders. It features **three creation modes**—**Preset Thread** for everyday and standard sizes (garden hoses, soda bottles, mason jars, metric/UNC, and more), **Custom Thread** for any diameter and pitch with easy FDM **Tight / Regular / Wide** print adjustments, and **Advanced Thread** for full control over flank angles, crest/root flats, fillets, and exact clearances—plus **Edit Thread** for live in-place updates. Pick any cylindrical shaft or hole to thread existing parts directly, or leave the face blank to generate a standalone **Bolt + Nut** pair.
 
+> **Download:** [**Download `custom-threads.zip` (v0.3.0)**](https://github.com/Sooner4500/solidcraft-custom-threads/raw/main/releases/custom-threads.zip) — or browse all archives in [`releases/`](releases).  
+> **Install in SolidCraft (`0.44.1+`):** Open **File ▸ Plugins… → Install plugin…**, select the `.zip` file (do not unzip it), and confirm permissions. The 4 tools appear directly on the **Model** tab under **Plugins**.
+
 <p align="center">
   <img src="docs/images/printed-test-parts.jpg" alt="3D-printed bolt, nut, and threaded plate test parts generated with Custom Threads in SolidCraft" width="420" />
 </p>
@@ -55,7 +58,7 @@
 
 ## Installation (SolidCraft `0.44.1`+)
 
-1. Download **`custom-threads.zip`** from the [Latest GitHub Release](https://github.com/Sooner4500/solidcraft-custom-threads/releases/latest) (no Rust toolchain required).
+1. Download [**`custom-threads.zip`**](https://github.com/Sooner4500/solidcraft-custom-threads/raw/main/releases/custom-threads.zip) (or pick a versioned archive from [`releases/`](releases) / [GitHub Releases](https://github.com/Sooner4500/solidcraft-custom-threads/releases/latest) — no Rust toolchain required).
 2. In SolidCraft, open **File ▸ Plugins… → Install plugin…** and select `custom-threads.zip`.
 3. Review permissions (`commands@0.1`, `files: []`, `net: false`, `clock: false` — zero external/network permissions) and confirm.
 4. All four commands appear directly as icon buttons inside the **Model** tab's **Plugins** group (and its dropdown menu, plus SolidCraft `0.45+` AI/MCP plugin tools):
@@ -144,6 +147,7 @@ solidcraft-cli plugin test dist/custom-threads.zip --require-cases
 - `src/math.rs` — Trapezoidal/buttress groove solver, tangent-trim fillet checks, buttress phase alignment, orthonormal frame builder, and cylinder/mesh classification.
 - `src/commands.rs` — Expression-driven 0-DOF sketch, User Parameter, coil, circular pattern, chamfer, and metadata builders.
 - `src/lib.rs` — Wasm `command-plugin` entry points (`preset-thread`, `custom-thread`, `advanced-thread`, `edit-thread`) and unit tests.
+- `releases/` — Ready-to-install prebuilt plugin archives (`custom-threads.zip` and versioned `custom-threads-v*.zip`).
 - `scripts/package.ps1` — Windows release packager, JSON minifier & validator.
 - `.github/workflows/release.yml` — Automated CI tests & `v*` tag release builder.
 
