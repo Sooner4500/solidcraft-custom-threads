@@ -1,8 +1,6 @@
 # SolidCraft Custom Threads (`custom-threads`)
 
-SolidCraft plugin for smooth, exact B-rep custom threads with arbitrary sizes, flank angles, clearances, multi-start leads, collapsed timeline folders, and live parameters.
-
-Designing threads for 3D printing—or for parts outside standard metal fastener tables—is usually a chore. Standard CAD thread tools follow machined-metal specs with near-zero clearance and steep 60° overhangs that often droop, bind, or fuse straight off an FDM printer. **Custom Threads** lets you add printable, custom-sized threads to any cylindrical shaft or hole in SolidCraft, with built-in clearances, self-supporting overhang angles, and live parameters you can dial in after a quick test print.
+**Custom Threads** is a SolidCraft plugin for smooth, exact B-rep 3D-printable threads with built-in clearances, live parameters, and collapsed timeline folders. It features **three creation modes**—**Preset Thread** for everyday and standard sizes (garden hoses, soda bottles, mason jars, metric/UNC, and more), **Custom Thread** for any diameter and pitch with easy FDM **Tight / Regular / Wide** print adjustments, and **Advanced Thread** for full control over flank angles, crest/root flats, fillets, and exact clearances—plus **Edit Thread** for live in-place updates. Pick any cylindrical shaft or hole to thread existing parts directly, or leave the face blank to generate a standalone **Bolt + Nut** pair.
 
 <p align="center">
   <img src="docs/images/printed-test-parts.jpg" alt="3D-printed bolt, nut, and threaded plate test parts generated with Custom Threads in SolidCraft" width="420" />
@@ -13,9 +11,10 @@ Designing threads for 3D printing—or for parts outside standard metal fastener
 
 ## Why Custom Threads?
 
+- **Three workflows, beginner to pro:** Start fast in **Preset Thread** (garden hose, soda bottle, mason jar, metric/UNC, or auto-match), size any thread with simple FDM Fit & nozzle defaults in **Custom Thread**, or tune every geometric scalar directly in **Advanced Thread** (flank angles, crest/root flats, fillets, clearances, and more).
 - **Threads that actually screw together off the build plate:** Built-in **radial clearance** (`0.2 mm` default) and **axial backlash** (`0.1 mm` default), support-free **45° flank angles**, nozzle-friendly **flat crests and roots** (`0.4 mm` default), and **45° lead-in chamfers** so printed bolts, caps, and threaded holes start easily and spin smoothly without sanding or chasing with a tap.
 - **Dial in your printer's fit in seconds:** Printers, filaments, and nozzle sizes vary. Every thread creates ordered **Parameters** (and works with **Edit Thread** live preview), so if a test print feels slightly tight, you can bump radial clearance from `0.2 mm` to `0.25 mm` and re-export—no redoing sketches or hunting through timeline steps.
-- **Any diameter, pitch, or profile — not just standard tables:** Go beyond built-in M-series fastener charts. Thread custom enclosures, jar lids, adapters, left-hand shafts, or load-bearing asymmetric **buttress** threads (`12°/45°`, etc.) on any shaft or bore at any orientation—or generate a standalone **Bolt + Nut** test pair to verify clearance before printing a large part.
+- **Any diameter, pitch, or profile — not just metal bolt tables:** Go beyond M-series fastener charts with left-hand threads, asymmetric load-bearing **buttress** profiles (`12°/45°`, etc.), or standalone **Bolt + Nut** test pairs to verify clearance before printing a large assembly.
 - **Quick-spin multi-start caps (`1–8` starts):** Create water-bottle-style multi-track threads so caps and containers catch effortlessly and tighten in a fraction of a turn instead of searching for alignment.
 - **Smooth B-rep geometry & tidy timelines:** Rather than generating heavy faceted meshes, Custom Threads sweeps a constrained 2D groove profile through SolidCraft's native helical B-rep engine (`solid.coil`). Models stay true analytic/NURBS B-rep, export cleanly to STL, 3MF, and STEP with fewer triangles, and collapse into a single named timeline folder.
 
