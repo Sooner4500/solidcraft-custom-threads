@@ -1,6 +1,6 @@
 [package]
 name = "custom_threads"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "SolidCraft plugin for smooth, exact B-rep custom threads with arbitrary sizes, flank angles, clearances, multi-start leads, collapsed timeline folders, and live parameters."
 license = "MIT"

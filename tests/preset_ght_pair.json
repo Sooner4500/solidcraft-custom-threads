@@ -1,0 +1,22 @@
+{
+  "entry": "preset-thread",
+  "description": "Default 3/4 in GHT Bolt + Nut pair with Regular 3D print fit",
+  "params": {},
+  "expect": {
+    "reply": {
+      "result": {
+        "param_prefix": "t1",
+        "folder_name": "Garden Hose 3/4\" GHT · 30°/30° · R0.20 A0.10 [t1]",
+        "bodies": ["Bolt", "Nut"],
+        "radial_clearance": 0.2,
+        "axial_clearance": 0.1
+      }
+    },
+    "model": {
+      "body_count": 2,
+      "total": {
+        "open_bodies_skipped": 0
+      }
+    }
+  }
+}

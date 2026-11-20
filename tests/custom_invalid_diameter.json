@@ -1,0 +1,11 @@
+{
+  "entry": "custom-thread",
+  "description": "Reject out-of-range major diameter on custom-thread",
+  "params": {
+    "dim_diameter": 0.1,
+    "pitch": 1.0
+  },
+  "expect": {
+    "error": "invalid_input"
+  }
+}

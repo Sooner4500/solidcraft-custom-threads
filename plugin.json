@@ -1,96 +1,285 @@
 {
   "id": "custom-threads",
   "name": "Custom Threads",
-  "version": "0.2.0",
-  "description": "SolidCraft plugin for smooth, exact B-rep custom threads with arbitrary sizes, flank angles, clearances, multi-start leads, collapsed timeline folders, and live parameters.",
+  "version": "0.3.0",
+  "description": "Smooth B-rep custom threads for 3D printing with presets, clearances, multi-start leads & live parameters.",
   "capabilities": ["commands@0.1"],
   "runtime": {
     "module": "plugin.wasm",
     "entries": [
       {
-        "name": "apply-thread",
+        "name": "preset-thread",
         "effect": "edit",
         "input_schema": {
           "type": "object",
-          "x-solidcraft-icon": "assets/apply-thread.svg",
-          "required": ["pitch", "upper_flank_angle_deg", "lower_flank_angle_deg", "radial_clearance", "axial_clearance", "crest_flat", "root_flat"],
+          "x-solidcraft-icon": "assets/i-preset.svg",
+          "required": ["preset"],
           "properties": {
-            "face": {"type": "array", "title": "Cylindrical face", "description": "Pick a cylindrical shaft or hole face (optional if already selected).", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face"]}},
-            "mode": {"type": "string", "title": "Thread Type", "description": "Auto-detect shaft vs. hole, or force external/internal.", "default": "auto", "oneOf": [{"const": "auto", "title": "Auto-detect"}, {"const": "external", "title": "External (shaft)"}, {"const": "internal", "title": "Internal (hole)"}]},
-            "param_prefix": {"type": "string", "title": "Parameter Prefix", "description": "Live User Parameter prefix (blank = automatic t1, t2, ...).", "default": "", "maxLength": 24},
-            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "Axial distance between adjacent thread crests.", "default": 3.0, "exclusiveMinimum": 0, "maximum": 100},
-            "length": {"type": "number", "title": "Thread Length (mm)", "description": "Threaded length along axis (0 or blank threads full face).", "minimum": 0, "maximum": 10000},
-            "starts": {"type": "integer", "title": "Starts", "description": "Number of thread starts (lead = starts x pitch).", "default": 1, "minimum": 1, "maximum": 8},
-            "left_hand": {"type": "boolean", "title": "Left-Hand Thread", "description": "Reverse helical twist direction.", "default": false},
-            "upper_flank_angle_deg": {"type": "number", "title": "Upper Flank Angle (deg)", "description": "Upper flank from horizontal (45 prints support-free; 30 = ISO 60).", "default": 45.0, "minimum": 1, "maximum": 80},
-            "lower_flank_angle_deg": {"type": "number", "title": "Lower Flank Angle (deg)", "description": "Lower flank from horizontal (vary for buttress threads).", "default": 45.0, "minimum": 1, "maximum": 80},
-            "radial_clearance": {"type": "number", "title": "Radial Clearance (mm)", "description": "Per-side radial offset for FDM fit.", "default": 0.2, "minimum": 0, "maximum": 10},
-            "axial_clearance": {"type": "number", "title": "Axial Backlash (mm)", "description": "Extra axial groove widening for smooth engagement.", "default": 0.1, "minimum": 0, "maximum": 10},
-            "crest_flat": {"type": "number", "title": "Crest Flat (mm)", "description": "Flat width at tooth tip (keep >= nozzle width).", "default": 0.4, "minimum": 0.01, "maximum": 50},
-            "root_flat": {"type": "number", "title": "Root Flat (mm)", "description": "Flat width at tooth valley bottom.", "default": 0.4, "minimum": 0.01, "maximum": 50},
-            "crest_fillet": {"type": "number", "title": "Crest Fillet (mm)", "description": "Optional corner fillet on crests (0 disables).", "default": 0.0, "minimum": 0, "maximum": 10},
-            "root_fillet": {"type": "number", "title": "Root Fillet (mm)", "description": "Optional corner fillet on roots (0 disables).", "default": 0.0, "minimum": 0, "maximum": 10},
-            "end_chamfer": {"type": "string", "title": "End Chamfer", "description": "Revolved lead-in/lead-out chamfer on free ends.", "default": "both", "oneOf": [{"const": "both", "title": "Both ends"}, {"const": "start", "title": "Start end only"}, {"const": "none", "title": "None"}]},
-            "apply_clearance_to_external": {"type": "boolean", "title": "Apply Clearance to External", "description": "If true on shaft, shrinks shaft groove instead of expecting clearance on nut.", "default": false}
+            "preset": {
+              "type": "string",
+              "title": "Thread Preset",
+              "description": "Pick an everyday/standard screw, or Auto-match from a picked face.",
+              "default": "ght_3_4",
+              "oneOf": [
+                {"const": "auto_iso", "title": "Metric — Auto-match face (M3–M64)"},
+                {"const": "auto_unc", "title": "US Inch — Auto-match face (#10–1\")"},
+                {"const": "ght_3_4", "title": "Garden Hose — US 3/4\" GHT (Ø27×2.21)"},
+                {"const": "pco_1881", "title": "Soda / Water Bottle — PCO-1881 (Ø27.4×2.7)"},
+                {"const": "mason_70g", "title": "Mason Jar Regular — 70G (Ø71.2×6.35)"},
+                {"const": "mason_86g", "title": "Mason Jar Wide — 86G (Ø86.2×6.35)"},
+                {"const": "acme_broom", "title": "Broom / Paint Pole — 3/4\"-5 ACME (Ø19.1×5.08)"},
+                {"const": "valve_8v1", "title": "Tire Valve Cap — Schrader 8V1 (Ø7.75×0.79)"},
+                {"const": "valve_5v2", "title": "Bike Valve — Presta 5V2 (Ø5.2×1.06)"},
+                {"const": "m5", "title": "Metric — M5×0.8"},
+                {"const": "m6", "title": "Metric — M6×1.0"},
+                {"const": "m8", "title": "Metric — M8×1.25"},
+                {"const": "m10", "title": "Metric — M10×1.5"},
+                {"const": "m12", "title": "Metric — M12×1.75"},
+                {"const": "m16", "title": "Metric — M16×2.0"},
+                {"const": "m20", "title": "Metric — M20×2.5"},
+                {"const": "m24", "title": "Metric — M24×3.0"},
+                {"const": "unc_1_4", "title": "Camera Tripod — US 1/4\"-20 UNC"},
+                {"const": "unc_5_16", "title": "US Bolt/Nut — 5/16\"-18 UNC"},
+                {"const": "unc_3_8", "title": "Heavy Tripod — US 3/8\"-16 UNC"},
+                {"const": "unc_1_2", "title": "US Bolt/Nut — 1/2\"-13 UNC"},
+                {"const": "unc_5_8", "title": "US Bolt/Nut — 5/8\"-11 UNC"},
+                {"const": "unc_3_4", "title": "US Bolt/Nut — 3/4\"-10 UNC"},
+                {"const": "npsm_1_2", "title": "US Straight Pipe — 1/2\" NPSM"},
+                {"const": "npsm_3_4", "title": "US Straight Pipe — 3/4\" NPSM"},
+                {"const": "bspp_1_2", "title": "Euro/UK Pipe — G 1/2\" BSPP"},
+                {"const": "bspp_3_4", "title": "Euro/UK Pipe — G 3/4\" BSPP"},
+                {"const": "ibc_s60x6", "title": "IBC Water Tote — S60×6 Buttress (Ø60×6)"},
+                {"const": "pg13_5", "title": "Cable Gland — PG13.5 (Ø20.4)"},
+                {"const": "pg16", "title": "Cable Gland — PG16 (Ø22.5)"},
+                {"const": "pg21", "title": "Cable Gland — PG21 (Ø28.3)"},
+                {"const": "cam_m42", "title": "Camera T2 — M42×0.75"},
+                {"const": "cam_m52", "title": "Camera Filter — 52mm M52×0.75"},
+                {"const": "cam_m58", "title": "Camera Filter — 58mm M58×0.75"},
+                {"const": "cam_m67", "title": "Camera Filter — 67mm M67×0.75"}
+              ]
+            },
+            "face": {"type": "array", "title": "Cylindrical Face (optional)", "description": "Click a shaft or hole to resize & thread. Blank builds Bolt + Nut.", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face"]}},
+            "fdm_adjust": {"type": "boolean", "title": "3D Print Adjustments", "description": "Adds print clearance & flat tips so parts mate. Off = exact CAD.", "default": true},
+            "fdm_fit": {
+              "type": "string",
+              "title": "Clearance / Fit",
+              "description": "Fit feel: Tight = snug, Regular = smooth spin, Wide = easy / draft.",
+              "default": "regular",
+              "oneOf": [
+                {"const": "tight", "title": "Tight (0.12/0.06)"},
+                {"const": "regular", "title": "Regular (0.20/0.10)"},
+                {"const": "wide", "title": "Wide (0.32/0.16)"},
+                {"const": "none", "title": "None (0.00)"}
+              ]
+            },
+            "fdm_layer_mm": {"type": "number", "title": "Layer Height (mm)", "description": "Slicer layer height (0.2 typical). Thicker layers add overhang room.", "default": 0.2},
+            "fdm_nozzle_mm": {"type": "number", "title": "Nozzle Width (mm)", "description": "Printer nozzle (0.4 typical). Keeps tooth tips at least 1 line wide.", "default": 0.4},
+            "fdm_target": {
+              "type": "string",
+              "title": "Mating With",
+              "description": "Metal: adds gap to single bolts or holes.\nPrinted: holes/nuts only.",
+              "default": "metal",
+              "oneOf": [
+                {"const": "metal", "title": "Metal Hardware"},
+                {"const": "printed", "title": "3D-Printed Part"}
+              ]
+            },
+            "opt_chamfer": {
+              "type": "string",
+              "title": "End Chamfer",
+              "description": "Lead-in bevel on thread ends so bolts catch without cross-threading.",
+              "default": "regular_both",
+              "oneOf": [
+                {"const": "regular_both", "title": "Regular (both)"},
+                {"const": "wide_both", "title": "Wide (both)"},
+                {"const": "regular_start", "title": "Regular (start)"},
+                {"const": "wide_start", "title": "Wide (start)"},
+                {"const": "none", "title": "None"}
+              ]
+            },
+            "opt_left_hand": {"type": "boolean", "title": "Left-Hand Thread", "description": "Turn counter-clockwise to tighten. Off = normal right-hand.", "default": false},
+            "opt_length": {"type": "number", "title": "Thread Length (mm)", "description": "How far threads run (mm). Blank = full face or preset length."},
+            "opt_output": {
+              "type": "string",
+              "title": "Output",
+              "description": "Auto threads picked face, or makes Bolt + Nut. Pick to force one.",
+              "default": "auto",
+              "oneOf": [
+                {"const": "auto", "title": "Auto (face or Pair)"},
+                {"const": "pair", "title": "Bolt + Nut Pair"},
+                {"const": "bolt", "title": "Bolt Only"},
+                {"const": "nut", "title": "Nut Only"},
+                {"const": "external", "title": "External (shaft)"},
+                {"const": "internal", "title": "Internal (hole)"}
+              ]
+            }
           }
         },
-        "slots": [{"kind": "menu", "name": "Apply Thread"}]
+        "slots": [{"kind": "menu", "name": "Preset Thread"}]
       },
       {
-        "name": "create-thread-pair",
+        "name": "custom-thread",
         "effect": "edit",
         "input_schema": {
           "type": "object",
-          "x-solidcraft-icon": "assets/thread-pair.svg",
-          "required": ["major_diameter", "pitch", "length", "upper_flank_angle_deg", "lower_flank_angle_deg", "radial_clearance", "axial_clearance", "crest_flat", "root_flat"],
+          "x-solidcraft-icon": "assets/i-custom.svg",
+          "required": ["pitch"],
           "properties": {
-            "generate": {"type": "string", "title": "Generate", "description": "Create mating bolt + nut pair, or one part.", "default": "pair", "oneOf": [{"const": "pair", "title": "Bolt + Nut pair"}, {"const": "bolt", "title": "Bolt only"}, {"const": "nut", "title": "Nut only"}]},
-            "param_prefix": {"type": "string", "title": "Parameter Prefix", "description": "Live User Parameter prefix (blank = automatic t1, t2, ...).", "default": "", "maxLength": 24},
-            "major_diameter": {"type": "number", "title": "Major Diameter (mm)", "description": "Nominal outer thread diameter.", "default": 20.0, "exclusiveMinimum": 1, "maximum": 2000},
-            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "Axial distance between adjacent thread crests.", "default": 3.0, "exclusiveMinimum": 0, "maximum": 100},
-            "length": {"type": "number", "title": "Length (mm)", "description": "Threaded cylinder height along Z.", "default": 20.0, "exclusiveMinimum": 0.5, "maximum": 2000},
-            "starts": {"type": "integer", "title": "Starts", "description": "Number of thread starts (lead = starts x pitch).", "default": 1, "minimum": 1, "maximum": 8},
-            "left_hand": {"type": "boolean", "title": "Left-Hand Thread", "description": "Reverse helical twist direction.", "default": false},
-            "upper_flank_angle_deg": {"type": "number", "title": "Upper Flank Angle (deg)", "description": "Upper flank from horizontal (45 prints support-free; 30 = ISO 60).", "default": 45.0, "minimum": 1, "maximum": 80},
-            "lower_flank_angle_deg": {"type": "number", "title": "Lower Flank Angle (deg)", "description": "Lower flank from horizontal (vary for buttress threads).", "default": 45.0, "minimum": 1, "maximum": 80},
-            "radial_clearance": {"type": "number", "title": "Radial Clearance (mm)", "description": "Per-side radial clearance on nut relative to bolt.", "default": 0.2, "minimum": 0, "maximum": 10},
-            "axial_clearance": {"type": "number", "title": "Axial Backlash (mm)", "description": "Extra axial clearance in nut groove.", "default": 0.1, "minimum": 0, "maximum": 10},
-            "crest_flat": {"type": "number", "title": "Crest Flat (mm)", "description": "Flat width at bolt crest.", "default": 0.4, "minimum": 0.01, "maximum": 50},
-            "root_flat": {"type": "number", "title": "Root Flat (mm)", "description": "Flat width at bolt root.", "default": 0.4, "minimum": 0.01, "maximum": 50},
-            "crest_fillet": {"type": "number", "title": "Crest Fillet (mm)", "description": "Optional corner fillet on crests (0 disables).", "default": 0.0, "minimum": 0, "maximum": 10},
-            "root_fillet": {"type": "number", "title": "Root Fillet (mm)", "description": "Optional corner fillet on roots (0 disables).", "default": 0.0, "minimum": 0, "maximum": 10},
-            "end_chamfer": {"type": "string", "title": "End Chamfer", "description": "Revolved lead-in/lead-out chamfer on ends.", "default": "both", "oneOf": [{"const": "both", "title": "Both ends"}, {"const": "start", "title": "Start end only"}, {"const": "none", "title": "None"}]},
-            "nut_wall_thickness": {"type": "number", "title": "Nut Wall Thickness (mm)", "description": "Radial wall outside nut thread major radius.", "default": 5.0, "exclusiveMinimum": 0.5, "maximum": 200},
-            "pair_spacing": {"type": "number", "title": "Pair Spacing (mm)", "description": "Gap between bolt and nut.", "default": 10.0, "minimum": 0, "maximum": 500}
+            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "Spacing between thread ridges (mm). Larger = chunkier, easier print.", "default": 3.0},
+            "dim_diameter": {"type": "number", "title": "Diameter (mm)", "description": "Outer width across thread peaks (mm) for standalone Bolt + Nut.", "default": 20.0},
+            "face": {"type": "array", "title": "Cylindrical Face (optional)", "description": "Click shaft/hole (draw holes at bolt outer size). Blank = Bolt + Nut.", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face"]}},
+            "fdm_adjust": {"type": "boolean", "title": "3D Print Adjustments", "description": "On: support-free 45° walls + gap + flat tips. Off: sharp 60°.", "default": true},
+            "fdm_fit": {
+              "type": "string",
+              "title": "Clearance / Fit",
+              "description": "Fit feel: Tight = snug, Regular = smooth spin, Wide = easy / draft.",
+              "default": "regular",
+              "oneOf": [
+                {"const": "tight", "title": "Tight (0.12/0.06)"},
+                {"const": "regular", "title": "Regular (0.20/0.10)"},
+                {"const": "wide", "title": "Wide (0.32/0.16)"},
+                {"const": "none", "title": "None (0.00)"}
+              ]
+            },
+            "fdm_layer_mm": {"type": "number", "title": "Layer Height (mm)", "description": "Slicer layer height (0.2 typical). Thicker layers add overhang room.", "default": 0.2},
+            "fdm_nozzle_mm": {"type": "number", "title": "Nozzle Width (mm)", "description": "Printer nozzle (0.4 typical). Keeps tooth tips at least 1 line wide.", "default": 0.4},
+            "fdm_target": {
+              "type": "string",
+              "title": "Mating With",
+              "description": "Printed: adds gap to holes/nuts only.\nMetal: adds gap to shafts too.",
+              "default": "printed",
+              "oneOf": [
+                {"const": "printed", "title": "3D-Printed Part"},
+                {"const": "metal", "title": "Metal Hardware"}
+              ]
+            },
+            "opt_chamfer": {
+              "type": "string",
+              "title": "End Chamfer",
+              "description": "Lead-in bevel on thread ends so bolts catch without cross-threading.",
+              "default": "regular_both",
+              "oneOf": [
+                {"const": "regular_both", "title": "Regular (both)"},
+                {"const": "wide_both", "title": "Wide (both)"},
+                {"const": "regular_start", "title": "Regular (start)"},
+                {"const": "wide_start", "title": "Wide (start)"},
+                {"const": "none", "title": "None"}
+              ]
+            },
+            "opt_left_hand": {"type": "boolean", "title": "Left-Hand Thread", "description": "Turn counter-clockwise to tighten. Off = normal right-hand.", "default": false},
+            "opt_length": {"type": "number", "title": "Thread Length (mm)", "description": "How far threads run (mm). Blank = full face or 20 mm standalone."},
+            "opt_output": {
+              "type": "string",
+              "title": "Output",
+              "description": "Auto threads picked face, or makes Bolt + Nut. Pick to force one.",
+              "default": "auto",
+              "oneOf": [
+                {"const": "auto", "title": "Auto (face or Pair)"},
+                {"const": "pair", "title": "Bolt + Nut Pair"},
+                {"const": "bolt", "title": "Bolt Only"},
+                {"const": "nut", "title": "Nut Only"},
+                {"const": "external", "title": "External (shaft)"},
+                {"const": "internal", "title": "Internal (hole)"}
+              ]
+            },
+            "opt_starts": {"type": "integer", "title": "Starts (Multi-Track)", "description": "Parallel spirals. 1 = normal screw; 2-4 = quick-twist jar/cap lids.", "default": 1}
           }
         },
-        "slots": [{"kind": "menu", "name": "Thread Pair"}]
+        "slots": [{"kind": "menu", "name": "Custom Thread"}]
+      },
+      {
+        "name": "advanced-thread",
+        "effect": "edit",
+        "input_schema": {
+          "type": "object",
+          "x-solidcraft-icon": "assets/i-adv.svg",
+          "required": ["pitch"],
+          "properties": {
+            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "Spacing between thread ridges (mm). Larger = chunkier. Exact values.", "default": 3.0},
+            "dim_diameter": {"type": "number", "title": "Diameter (mm)", "description": "Outer width across thread peaks (mm) for standalone Bolt + Nut.", "default": 20.0},
+            "dim_left_hand": {"type": "boolean", "title": "Left-Hand Thread", "description": "Turn counter-clockwise to tighten. Off = normal right-hand.", "default": false},
+            "dim_length": {"type": "number", "title": "Thread Length (mm)", "description": "How far threads run (mm). Blank = full face or 20 mm standalone."},
+            "dim_starts": {"type": "integer", "title": "Starts", "description": "Parallel spirals. 1 = normal screw; 2-4 = quick-twist jar/cap lids.", "default": 1},
+            "face": {"type": "array", "title": "Cylindrical Face (optional)", "description": "Click shaft/hole (draw holes at bolt outer size). Blank = Bolt + Nut.", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face"]}},
+            "flank_lower_deg": {"type": "number", "title": "Lower Flank Angle (deg)", "description": "Bottom tooth slope. 45° support-free; 30° standard; vary = buttress.", "default": 45.0},
+            "flank_upper_deg": {"type": "number", "title": "Upper Flank Angle (deg)", "description": "Top tooth slope. 45° prints support-free; 30° matches 60° metal.", "default": 45.0},
+            "gap_axial_clr": {"type": "number", "title": "Axial Backlash (mm)", "description": "Up-and-down play along screw. Higher = freer spin (0.1 mm typical).", "default": 0.1},
+            "gap_mating": {
+              "type": "string",
+              "title": "Mating With",
+              "description": "Printed: adds gap to holes/nuts only.\nMetal: shrinks single shafts too.",
+              "default": "printed",
+              "oneOf": [
+                {"const": "printed", "title": "3D-Printed Part"},
+                {"const": "metal", "title": "Metal / Offset external"}
+              ]
+            },
+            "gap_radial_clr": {"type": "number", "title": "Radial Clearance (mm)", "description": "Side-to-side bolt/nut gap. Higher = looser fit (0.2 mm typical).", "default": 0.2},
+            "opt_chamfer": {
+              "type": "string",
+              "title": "End Chamfer",
+              "description": "Lead-in bevel on thread ends so bolts catch without cross-threading.",
+              "default": "regular_both",
+              "oneOf": [
+                {"const": "regular_both", "title": "Regular (both)"},
+                {"const": "wide_both", "title": "Wide (both)"},
+                {"const": "regular_start", "title": "Regular (start)"},
+                {"const": "wide_start", "title": "Wide (start)"},
+                {"const": "none", "title": "None"}
+              ]
+            },
+            "opt_chamfer_mm": {"type": "number", "title": "Chamfer Size (mm)", "description": "Optional exact bevel width (mm). Blank uses End Chamfer above."},
+            "opt_nut_wall": {"type": "number", "title": "Nut Wall (mm)", "description": "Wall thickness around generated nut. Thicker resists cracking.", "default": 5.0},
+            "opt_output": {
+              "type": "string",
+              "title": "Output",
+              "description": "Auto threads picked face, or makes Bolt + Nut. Pick to force one.",
+              "default": "auto",
+              "oneOf": [
+                {"const": "auto", "title": "Auto (face or Pair)"},
+                {"const": "pair", "title": "Bolt + Nut Pair"},
+                {"const": "bolt", "title": "Bolt Only"},
+                {"const": "nut", "title": "Nut Only"},
+                {"const": "external", "title": "External (shaft)"},
+                {"const": "internal", "title": "Internal (hole)"}
+              ]
+            },
+            "opt_pair_spacing": {"type": "number", "title": "Pair Spacing (mm)", "description": "Gap between generated Bolt & Nut (0 stacks them to check fit).", "default": 10.0},
+            "opt_param_prefix": {"type": "string", "title": "Parameter Prefix", "description": "Optional short tag (e.g. cap) for parameters; blank = t1, t2...", "default": ""},
+            "tooth_crest_fillet": {"type": "number", "title": "Crest Fillet (mm)", "description": "Rounds tooth peaks for smooth feel. 0 = flat; >0 to tune in Edit.", "default": 0.0},
+            "tooth_crest_flat": {"type": "number", "title": "Crest Flat (mm)", "description": "Flat width on tooth peaks. Keep >= nozzle (0.4) so tips print solid.", "default": 0.4},
+            "tooth_root_fillet": {"type": "number", "title": "Root Fillet (mm)", "description": "Rounds valley corners for strength. 0 = sharp; >0 to tune in Edit.", "default": 0.0},
+            "tooth_root_flat": {"type": "number", "title": "Root Flat (mm)", "description": "Flat width at valley bottoms. Wider = stronger groove (0.4 typical).", "default": 0.4}
+          }
+        },
+        "slots": [{"kind": "menu", "name": "Advanced Thread"}]
       },
       {
         "name": "edit-thread",
         "effect": "edit",
         "input_schema": {
           "type": "object",
-          "x-solidcraft-icon": "assets/edit-thread.svg",
+          "x-solidcraft-icon": "assets/i-edit.svg",
           "properties": {
-            "target": {"type": "array", "title": "Target Thread (optional)", "description": "Pick any face or body of the thread to edit (optional).", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face", "body"]}},
-            "param_prefix": {"type": "string", "title": "Parameter Prefix", "description": "Prefix to edit (e.g. t1; blank = picked or latest thread).", "default": "", "maxLength": 24},
-            "major_diameter": {"type": "number", "title": "Major Diameter (mm)", "description": "New major diameter (Pair/Bolt/Nut; blank keeps current).", "exclusiveMinimum": 1, "maximum": 2000},
-            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "New pitch (blank keeps current).", "exclusiveMinimum": 0, "maximum": 100},
-            "length": {"type": "number", "title": "Length (mm)", "description": "New threaded length (blank keeps current).", "exclusiveMinimum": 0.2, "maximum": 10000},
-            "starts": {"type": "integer", "title": "Starts", "description": "New starts 1-8 (blank keeps current).", "minimum": 1, "maximum": 8},
-            "left_hand": {"type": "string", "title": "Left-Hand Thread", "description": "Change helical twist direction.", "default": "keep", "oneOf": [{"const": "keep", "title": "Keep current"}, {"const": "right", "title": "Right-hand (standard)"}, {"const": "left", "title": "Left-hand"}]},
-            "upper_flank_angle_deg": {"type": "number", "title": "Upper Flank Angle (deg)", "description": "New upper flank angle (blank keeps current).", "minimum": 1, "maximum": 80},
-            "lower_flank_angle_deg": {"type": "number", "title": "Lower Flank Angle (deg)", "description": "New lower flank angle (blank keeps current).", "minimum": 1, "maximum": 80},
-            "radial_clearance": {"type": "number", "title": "Radial Clearance (mm)", "description": "New radial clearance (blank keeps current).", "minimum": 0, "maximum": 10},
-            "axial_clearance": {"type": "number", "title": "Axial Backlash (mm)", "description": "New axial backlash (blank keeps current).", "minimum": 0, "maximum": 10},
-            "crest_flat": {"type": "number", "title": "Crest Flat (mm)", "description": "New crest flat (blank keeps current).", "minimum": 0.01, "maximum": 50},
-            "root_flat": {"type": "number", "title": "Root Flat (mm)", "description": "New root flat (blank keeps current).", "minimum": 0.01, "maximum": 50},
-            "crest_fillet": {"type": "number", "title": "Crest Fillet (mm)", "description": "New crest fillet (only if created > 0; blank keeps current).", "minimum": 0, "maximum": 10},
-            "root_fillet": {"type": "number", "title": "Root Fillet (mm)", "description": "New root fillet (only if created > 0; blank keeps current).", "minimum": 0, "maximum": 10},
-            "end_chamfer": {"type": "string", "title": "End Chamfer", "description": "Enable or suppress revolved end chamfers.", "default": "keep", "oneOf": [{"const": "keep", "title": "Keep current"}, {"const": "both", "title": "Enabled"}, {"const": "none", "title": "Disabled (suppressed)"}]},
-            "nut_wall_thickness": {"type": "number", "title": "Nut Wall Thickness (mm)", "description": "New Nut wall thickness (blank keeps current).", "exclusiveMinimum": 0.5, "maximum": 200},
-            "pair_spacing": {"type": "number", "title": "Pair Spacing (mm)", "description": "New Bolt-Nut gap (blank keeps current).", "minimum": 0, "maximum": 500}
+            "target": {"type": "array", "title": "Target Thread (optional)", "description": "Pick a threaded face/body to edit (Timeline folder shows values). Blank fields stay as-is.", "maxItems": 1, "x-solidcraft-selection": {"version": 1, "accept": ["face", "body"]}},
+            "param_prefix": {"type": "string", "title": "Parameter Prefix", "description": "Thread tag from Timeline (e.g. t1) if not picked; blank edits latest.", "default": ""},
+            "major_diameter": {"type": "number", "title": "Major Diameter (mm)", "description": "Outer width across thread peaks (mm)."},
+            "pitch": {"type": "number", "title": "Pitch (mm)", "description": "Spacing between thread ridges (mm). Larger = coarser teeth."},
+            "length": {"type": "number", "title": "Length (mm)", "description": "How far the threads run along the shaft or hole (mm)."},
+            "starts": {"type": "integer", "title": "Starts", "description": "Parallel thread spirals (1 = normal bolt, 2-4 = quick-twist)."},
+            "left_hand": {"type": "string", "title": "Left-Hand Thread", "description": "Switch between normal right-hand and counter-clockwise left-hand.", "default": "keep", "oneOf": [{"const": "keep", "title": "Keep"}, {"const": "right", "title": "Right-hand"}, {"const": "left", "title": "Left-hand"}]},
+            "upper_flank_angle_deg": {"type": "number", "title": "Upper Flank (deg)", "description": "Top tooth wall slope (45° easy print, 30° standard 60° bolt)."},
+            "lower_flank_angle_deg": {"type": "number", "title": "Lower Flank (deg)", "description": "Bottom tooth wall slope (45° easy print, 30° standard bolt)."},
+            "radial_clearance": {"type": "number", "title": "Radial Clearance (mm)", "description": "Side-to-side gap between bolt & nut. Higher = looser fit."},
+            "axial_clearance": {"type": "number", "title": "Axial Backlash (mm)", "description": "Up-and-down play along the screw. Higher = freer spin."},
+            "crest_flat": {"type": "number", "title": "Crest Flat (mm)", "description": "Flat width on tooth peaks (keep >= nozzle width)."},
+            "root_flat": {"type": "number", "title": "Root Flat (mm)", "description": "Flat width at valley bottoms (wider = stronger)."},
+            "crest_fillet": {"type": "number", "title": "Crest Fillet (mm)", "description": "Peak corner rounding (only editable if created >0)."},
+            "root_fillet": {"type": "number", "title": "Root Fillet (mm)", "description": "Valley corner rounding (only editable if created >0)."},
+            "end_chamfer": {"type": "string", "title": "End Chamfer", "description": "Lead-in bevel on ends (Regular, Wide, or None).", "default": "keep", "oneOf": [{"const": "keep", "title": "Keep"}, {"const": "regular", "title": "Regular"}, {"const": "wide", "title": "Wide"}, {"const": "none", "title": "None"}]},
+            "chamfer_mm": {"type": "number", "title": "Chamfer Size (mm)", "description": "Exact lead-in bevel width (mm); overrides End Chamfer."},
+            "nut_wall_thickness": {"type": "number", "title": "Nut Wall (mm)", "description": "Wall thickness around a standalone nut (mm)."},
+            "pair_spacing": {"type": "number", "title": "Pair Spacing (mm)", "description": "Gap between standalone Bolt & Nut (0 = stacked together)."}
           }
         },
         "slots": [{"kind": "menu", "name": "Edit Thread"}]

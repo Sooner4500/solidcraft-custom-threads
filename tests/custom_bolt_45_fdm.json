@@ -1,0 +1,28 @@
+{
+  "entry": "custom-thread",
+  "description": "Custom 2-start 45 deg FDM bolt with Ø20 mm major diameter and 3 mm pitch",
+  "params": {
+    "dim_diameter": 20.0,
+    "pitch": 3.0,
+    "opt_length": 12.0,
+    "opt_starts": 2,
+    "opt_output": "bolt"
+  },
+  "expect": {
+    "reply": {
+      "result": {
+        "param_prefix": "t1",
+        "major_diameter": 20.0,
+        "pitch": 3.0,
+        "lead": 6.0,
+        "bodies": ["Bolt"]
+      }
+    },
+    "model": {
+      "body_count": 1,
+      "total": {
+        "open_bodies_skipped": 0
+      }
+    }
+  }
+}

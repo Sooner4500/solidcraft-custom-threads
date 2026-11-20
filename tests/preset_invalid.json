@@ -1,0 +1,11 @@
+{
+  "entry": "preset-thread",
+  "description": "Reject unknown thread preset with invalid_input error",
+  "params": {
+    "preset": "bogus"
+  },
+  "expect": {
+    "error": "invalid_input",
+    "message": "Unknown thread preset"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "entry": "preset-thread",
+  "description": "Auto-match ISO M10 thread onto a picked Ø10 mm cylindrical shaft face",
+  "design": "fixtures/shaft_m10.json",
+  "params": {
+    "preset": "auto_iso",
+    "face": [
+      {
+        "type": "face",
+        "body": "Shaft",
+        "point": [5.0, 0.0, 7.5]
+      }
+    ]
+  },
+  "expect": {
+    "reply": {
+      "result": {
+        "param_prefix": "t1",
+        "folder_name": "M10x1.5 · 30°/30° · R0.20 A0.10 [t1]",
+        "body": "Shaft",
+        "kind": "external"
+      }
+    },
+    "model": {
+      "body_count": 1,
+      "total": {
+        "open_bodies_skipped": 0
+      }
+    }
+  }
+}

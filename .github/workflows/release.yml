@@ -38,8 +38,9 @@ jobs:
           mkdir -p dist/custom-threads/assets
           wasm-tools component new target/wasm32-unknown-unknown/release/custom_threads.wasm -o dist/custom-threads/plugin.wasm
           wasm-tools validate dist/custom-threads/plugin.wasm
-          cp plugin.json dist/custom-threads/plugin.json
+          python3 -c "import json, pathlib, sys; d=json.loads(pathlib.Path('plugin.json').read_text(encoding='utf-8')); b=json.dumps(d, separators=(',',':'), ensure_ascii=False).encode('utf-8'); assert len(b)<=16384, f'plugin.json {len(b)} > 16384'; pathlib.Path('dist/custom-threads/plugin.json').write_bytes(b); print(f'Minified plugin.json: {len(b)} bytes')"
           cp assets/*.svg dist/custom-threads/assets/
+          cp -r tests dist/custom-threads/tests
           (cd dist && zip -r custom-threads.zip custom-threads)
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

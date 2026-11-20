@@ -1,0 +1,559 @@
+{
+  "format": "solidcraft/63",
+  "name": "m8_bolt",
+  "units": "mm",
+  "params": [
+    {
+      "name": "t1_major_d",
+      "expr": "8.000000 mm",
+      "unit": "mm",
+      "comment": "1. Major Diameter",
+      "model": false
+    },
+    {
+      "name": "t1_pitch",
+      "expr": "1.250000 mm",
+      "unit": "mm",
+      "comment": "2. Pitch",
+      "model": false
+    },
+    {
+      "name": "t1_length",
+      "expr": "10.000000 mm",
+      "unit": "mm",
+      "comment": "3. Length",
+      "model": false
+    },
+    {
+      "name": "t1_starts",
+      "expr": "1",
+      "unit": "",
+      "comment": "4. Starts (1-8)",
+      "model": false
+    },
+    {
+      "name": "t1_upper_ang",
+      "expr": "30.000000 deg",
+      "unit": "deg",
+      "comment": "5. Upper Flank Angle",
+      "model": false
+    },
+    {
+      "name": "t1_lower_ang",
+      "expr": "30.000000 deg",
+      "unit": "deg",
+      "comment": "6. Lower Flank Angle",
+      "model": false
+    },
+    {
+      "name": "t1_radial_clr",
+      "expr": "0.200000 mm",
+      "unit": "mm",
+      "comment": "7. Radial Clearance",
+      "model": false
+    },
+    {
+      "name": "t1_axial_clr",
+      "expr": "0.100000 mm",
+      "unit": "mm",
+      "comment": "8. Axial Backlash",
+      "model": false
+    },
+    {
+      "name": "t1_crest_flat",
+      "expr": "0.312500 mm",
+      "unit": "mm",
+      "comment": "9. Crest Flat",
+      "model": false
+    },
+    {
+      "name": "t1_root_flat",
+      "expr": "0.196299 mm",
+      "unit": "mm",
+      "comment": "10. Root Flat",
+      "model": false
+    },
+    {
+      "name": "t1_depth",
+      "expr": "(t1_pitch - t1_crest_flat - t1_root_flat) / (tan(t1_upper_ang) + tan(t1_lower_ang))",
+      "unit": "mm",
+      "comment": "Derived nominal thread depth",
+      "model": false
+    },
+    {
+      "name": "t1_chamfer",
+      "expr": "min(0.95 * t1_depth, 0.25 * t1_length)",
+      "unit": "mm",
+      "comment": "Derived lead-in chamfer depth",
+      "model": false
+    }
+  ],
+  "text_params": [
+    {
+      "name": "t1_meta",
+      "text": "{\"v\":1,\"prefix\":\"t1\",\"kind\":\"bolt\",\"bodies\":[\"Bolt\"],\"coils\":[\"Bolt_Coil\"],\"chamfers\":[\"Bolt_Chamfer\"],\"offset_feature\":null,\"group_id\":7,\"apply_clearance\":true,\"has_crest_fillet\":false,\"has_root_fillet\":false,\"has_major_d\":true,\"has_nut_wall\":false,\"has_spacing\":false,\"left_hand\":false,\"end_chamfer\":\"both\",\"face_span\":null,\"label\":\"M8x1.25\",\"chamfer_size\":\"regular\",\"offset_mode\":null,\"base_radius\":null,\"major_is_favorite\":true}",
+      "comment": "Custom Threads metadata"
+    }
+  ],
+  "features": [
+    {
+      "id": 1,
+      "name": "BoltBlank",
+      "suppressed": false,
+      "body_names": [
+        "Bolt"
+      ],
+      "param_names": [
+        "d1",
+        "d2"
+      ],
+      "type": "cylinder",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "radius": "(t1_major_d - 2 * t1_radial_clr) / 2",
+      "height": "t1_length",
+      "operation": "new_body"
+    },
+    {
+      "id": 2,
+      "name": "Bolt_Profile",
+      "suppressed": false,
+      "type": "sketch",
+      "plane": {
+        "type": "custom",
+        "plane": {
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "y_dir": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "sketch": {
+        "points": [
+          {
+            "id": "origin",
+            "pos": [
+              0.0,
+              0.0
+            ],
+            "fixed": true
+          },
+          {
+            "id": "p1",
+            "pos": [
+              3.8,
+              -0.7312500000000001
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr",
+              "y": "((-(t1_pitch * t1_starts)) + 0.5 * (t1_root_flat + t1_axial_clr)) + t1_depth * tan(t1_lower_ang)"
+            }
+          },
+          {
+            "id": "p2",
+            "pos": [
+              3.15810110468957,
+              -1.1018505
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr - t1_depth",
+              "y": "(-(t1_pitch * t1_starts)) + 0.5 * (t1_root_flat + t1_axial_clr)"
+            }
+          },
+          {
+            "id": "p3",
+            "pos": [
+              3.15810110468957,
+              -1.3981495
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr - t1_depth",
+              "y": "(-(t1_pitch * t1_starts)) - 0.5 * (t1_root_flat + t1_axial_clr)"
+            }
+          },
+          {
+            "id": "p4",
+            "pos": [
+              3.8,
+              -1.7687499999999998
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr",
+              "y": "((-(t1_pitch * t1_starts)) - 0.5 * (t1_root_flat + t1_axial_clr)) - t1_depth * tan(t1_upper_ang)"
+            }
+          },
+          {
+            "id": "p5",
+            "pos": [
+              4.0,
+              -1.7687499999999998
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr + 0.2 mm",
+              "y": "((-(t1_pitch * t1_starts)) - 0.5 * (t1_root_flat + t1_axial_clr)) - t1_depth * tan(t1_upper_ang)"
+            }
+          },
+          {
+            "id": "p6",
+            "pos": [
+              4.0,
+              -0.7312500000000001
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "t1_major_d / 2 - t1_radial_clr + 0.2 mm",
+              "y": "((-(t1_pitch * t1_starts)) + 0.5 * (t1_root_flat + t1_axial_clr)) + t1_depth * tan(t1_lower_ang)"
+            }
+          }
+        ],
+        "curves": [
+          {
+            "id": "l1",
+            "type": "line",
+            "a": 1,
+            "b": 2,
+            "construction": false
+          },
+          {
+            "id": "l2",
+            "type": "line",
+            "a": 2,
+            "b": 3,
+            "construction": false
+          },
+          {
+            "id": "l3",
+            "type": "line",
+            "a": 3,
+            "b": 4,
+            "construction": false
+          },
+          {
+            "id": "l4",
+            "type": "line",
+            "a": 4,
+            "b": 5,
+            "construction": false
+          },
+          {
+            "id": "l5",
+            "type": "line",
+            "a": 5,
+            "b": 6,
+            "construction": false
+          },
+          {
+            "id": "l6",
+            "type": "line",
+            "a": 6,
+            "b": 1,
+            "construction": false
+          }
+        ],
+        "constraints": [],
+        "counters": {
+          "l": 6,
+          "p": 6
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "Bolt_Coil",
+      "suppressed": false,
+      "param_names": [
+        "d3",
+        "d4"
+      ],
+      "type": "coil",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "sketch": 2,
+      "pitch": "t1_pitch * t1_starts",
+      "turns": "t1_length / (t1_pitch * t1_starts) + 2",
+      "section": "circular",
+      "operation": "cut",
+      "targets": [
+        "Bolt"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Bolt_Starts",
+      "suppressed": false,
+      "param_names": [
+        "d5",
+        "d6"
+      ],
+      "type": "pattern",
+      "features": [
+        3
+      ],
+      "pattern": {
+        "type": "circular",
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "count": "t1_starts",
+        "angle": "360 deg"
+      }
+    },
+    {
+      "id": 5,
+      "name": "Bolt_ChamferSketch",
+      "suppressed": false,
+      "type": "sketch",
+      "plane": {
+        "type": "custom",
+        "plane": {
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "y_dir": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "sketch": {
+        "points": [
+          {
+            "id": "origin",
+            "pos": [
+              0.0,
+              0.0
+            ],
+            "fixed": true
+          },
+          {
+            "id": "p1",
+            "pos": [
+              3.190196049455092,
+              -0.2
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "max(0.2 mm, (t1_major_d / 2 - t1_radial_clr) - t1_chamfer)"
+            }
+          },
+          {
+            "id": "p2",
+            "pos": [
+              4.0,
+              -0.2
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "(t1_major_d / 2 - t1_radial_clr) + 0.2 mm"
+            }
+          },
+          {
+            "id": "p3",
+            "pos": [
+              4.0,
+              0.6098039505449082
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "(t1_major_d / 2 - t1_radial_clr) + 0.2 mm",
+              "y": "t1_chamfer"
+            }
+          },
+          {
+            "id": "p4",
+            "pos": [
+              3.190196049455092,
+              10.2
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "max(0.2 mm, (t1_major_d / 2 - t1_radial_clr) - t1_chamfer)",
+              "y": "(t1_length) + 0.2 mm"
+            }
+          },
+          {
+            "id": "p5",
+            "pos": [
+              4.0,
+              10.2
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "(t1_major_d / 2 - t1_radial_clr) + 0.2 mm",
+              "y": "(t1_length) + 0.2 mm"
+            }
+          },
+          {
+            "id": "p6",
+            "pos": [
+              4.0,
+              9.390196049455092
+            ],
+            "fixed": true,
+            "exprs": {
+              "x": "(t1_major_d / 2 - t1_radial_clr) + 0.2 mm",
+              "y": "(t1_length) - t1_chamfer"
+            }
+          }
+        ],
+        "curves": [
+          {
+            "id": "l1",
+            "type": "line",
+            "a": 1,
+            "b": 2,
+            "construction": false
+          },
+          {
+            "id": "l2",
+            "type": "line",
+            "a": 2,
+            "b": 3,
+            "construction": false
+          },
+          {
+            "id": "l3",
+            "type": "line",
+            "a": 3,
+            "b": 1,
+            "construction": false
+          },
+          {
+            "id": "l4",
+            "type": "line",
+            "a": 4,
+            "b": 5,
+            "construction": false
+          },
+          {
+            "id": "l5",
+            "type": "line",
+            "a": 5,
+            "b": 6,
+            "construction": false
+          },
+          {
+            "id": "l6",
+            "type": "line",
+            "a": 6,
+            "b": 4,
+            "construction": false
+          }
+        ],
+        "constraints": [],
+        "counters": {
+          "l": 6,
+          "p": 6
+        }
+      }
+    },
+    {
+      "id": 6,
+      "name": "Bolt_Chamfer",
+      "suppressed": false,
+      "param_names": [
+        "d7"
+      ],
+      "type": "revolve",
+      "sketch": 5,
+      "profiles": {
+        "type": "all"
+      },
+      "axis": {
+        "type": "line",
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "dir": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "angle": "360 deg",
+      "operation": "cut",
+      "targets": [
+        "Bolt"
+      ],
+      "convention": "sketch_normal"
+    }
+  ],
+  "next_id": 8,
+  "next_component_color_index": 0,
+  "favorites": [
+    "t1_axial_clr",
+    "t1_crest_flat",
+    "t1_length",
+    "t1_lower_ang",
+    "t1_major_d",
+    "t1_pitch",
+    "t1_radial_clr",
+    "t1_root_flat",
+    "t1_starts",
+    "t1_upper_ang"
+  ],
+  "timeline_groups": [
+    {
+      "id": 7,
+      "name": "M8x1.25 · 30°/30° · R0.20 A0.10 [t1]",
+      "parent": null,
+      "features": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    }
+  ]
+}

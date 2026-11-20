@@ -1,0 +1,9 @@
+{
+  "entry": "edit-thread",
+  "description": "Refuse edit-thread cleanly when design has no Custom Threads",
+  "params": {},
+  "expect": {
+    "error": "invalid_input",
+    "message": "No Custom Threads found"
+  }
+}

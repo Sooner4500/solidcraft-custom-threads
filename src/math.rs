@@ -24,6 +24,15 @@ pub enum EndChamfer {
     None,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ChamferSize {
+    #[default]
+    Regular,
+    Wide,
+    Custom(f64),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThreadProfileParams {
     pub major_diameter: f64,
@@ -40,6 +49,7 @@ pub struct ThreadProfileParams {
     pub crest_fillet: f64,
     pub root_fillet: f64,
     pub end_chamfer: EndChamfer,
+    pub chamfer_size: ChamferSize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -285,8 +295,57 @@ pub fn validate_and_depth(p: &ThreadProfileParams) -> Result<f64, ValidationErro
             ));
         }
     }
+    if let ChamferSize::Custom(c) = p.chamfer_size {
+        if !c.is_finite() || c <= 0.0 || c > p.length * 0.45 {
+            return Err(ValidationError::new(
+                "opt_chamfer_mm",
+                format!(
+                    "chamfer size ({c:.3} mm) must be > 0 and <= 45% of thread length ({:.3} mm)",
+                    p.length * 0.45
+                ),
+            ));
+        }
+    }
 
     Ok(h_nom)
+}
+
+pub fn chamfer_expression(prefix: &str, size: ChamferSize, has_nut_wall: bool) -> String {
+    match size {
+        ChamferSize::Regular => format!("min(0.95 * {prefix}_depth, 0.25 * {prefix}_length)"),
+        ChamferSize::Wide => {
+            if has_nut_wall {
+                format!(
+                    "min(1.50 * {prefix}_depth, 0.35 * {prefix}_length, 0.32 * {prefix}_major_d, {prefix}_depth + 0.65 * {prefix}_nut_wall)"
+                )
+            } else {
+                format!(
+                    "min(1.50 * {prefix}_depth, 0.35 * {prefix}_length, 0.32 * {prefix}_major_d)"
+                )
+            }
+        }
+        ChamferSize::Custom(v) => format!("min({v:.6} mm, 0.40 * {prefix}_length)"),
+    }
+}
+
+pub fn compute_chamfer_depth(
+    depth: f64,
+    length: f64,
+    major_d: f64,
+    nut_wall: Option<f64>,
+    size: ChamferSize,
+) -> f64 {
+    match size {
+        ChamferSize::Regular => (0.95 * depth).min(0.25 * length),
+        ChamferSize::Wide => {
+            let mut d = (1.50 * depth).min(0.35 * length).min(0.32 * major_d);
+            if let Some(w) = nut_wall {
+                d = d.min(depth + 0.65 * w);
+            }
+            d
+        }
+        ChamferSize::Custom(v) => v.min(0.40 * length),
+    }
 }
 
 fn compute_surface_stub(surface_fillet: f64, p: &ThreadProfileParams) -> f64 {
@@ -591,6 +650,7 @@ mod tests {
             crest_fillet: 0.0,
             root_fillet: 0.0,
             end_chamfer: EndChamfer::Both,
+            chamfer_size: ChamferSize::Regular,
         }
     }
 
@@ -611,6 +671,7 @@ mod tests {
             crest_fillet: 0.0,
             root_fillet: 0.0,
             end_chamfer: EndChamfer::None,
+            chamfer_size: ChamferSize::Regular,
         };
         let h = validate_and_depth(&p).unwrap();
         let expected = 5.0 * 3.0_f64.sqrt() / 16.0 * 1.5;

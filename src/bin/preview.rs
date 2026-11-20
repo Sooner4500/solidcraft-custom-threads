@@ -1,5 +1,7 @@
 use custom_threads::commands::{PairMode, PairParams, build_thread_pair_commands};
-use custom_threads::math::{EndChamfer, ThreadProfileParams};
+use custom_threads::fdm::{ChamferChoice, FdmOptions, FitTier, MatingTarget, resolve_preset_profile};
+use custom_threads::math::{ChamferSize, EndChamfer, ThreadProfileParams};
+use custom_threads::presets::lookup_preset;
 use serde_json::json;
 
 fn write_case(out_dir: &std::path::Path, name: &str, params: &PairParams) {
@@ -26,6 +28,7 @@ fn base_profile() -> ThreadProfileParams {
         crest_fillet: 0.0,
         root_fillet: 0.0,
         end_chamfer: EndChamfer::Both,
+        chamfer_size: ChamferSize::Regular,
     }
 }
 
@@ -45,37 +48,72 @@ fn main() {
             generate: PairMode::Pair,
             nut_wall_thickness: 5.0,
             pair_spacing: 8.0,
+            apply_bolt_clearance: false,
             coaxial_overlay: false,
         },
     );
 
-    // 1b. Bolt only (for single-body triangle comparison vs built-in M20)
-    write_case(
-        &out_dir,
-        "fdm45_bolt",
-        &PairParams {
-            profile: base_profile(),
-            generate: PairMode::Bolt,
-            nut_wall_thickness: 5.0,
-            pair_spacing: 8.0,
-            coaxial_overlay: false,
+    // 2. Garden Hose 3/4" GHT printed pair
+    let ght = lookup_preset("ght_3_4").unwrap();
+    let ght_prof = resolve_preset_profile(
+        ght,
+        None,
+        None,
+        false,
+        &FdmOptions {
+            adjust: true,
+            fit: FitTier::Regular,
+            nozzle_mm: 0.4,
+            layer_mm: 0.2,
+            mating: MatingTarget::Printed,
+            chamfer: ChamferChoice::WideBoth,
         },
-    );
-
-    // 2. Coaxial overlay for cross-section clearance inspection
+    )
+    .unwrap();
     write_case(
         &out_dir,
-        "fdm45_coaxial",
+        "preset_ght_3_4",
         &PairParams {
-            profile: base_profile(),
+            profile: ght_prof,
             generate: PairMode::Pair,
-            nut_wall_thickness: 5.0,
-            pair_spacing: 0.0,
-            coaxial_overlay: true,
+            nut_wall_thickness: 5.5,
+            pair_spacing: 10.0,
+            apply_bolt_clearance: false,
+            coaxial_overlay: false,
         },
     );
 
-    // 3. Asymmetric buttress (10 deg load flank / 45 deg overhang flank)
+    // 3. M8x1.25 Regular FDM pair
+    let m8 = lookup_preset("m8").unwrap();
+    let m8_prof = resolve_preset_profile(
+        m8,
+        None,
+        None,
+        false,
+        &FdmOptions {
+            adjust: true,
+            fit: FitTier::Regular,
+            nozzle_mm: 0.4,
+            layer_mm: 0.2,
+            mating: MatingTarget::Printed,
+            chamfer: ChamferChoice::RegularBoth,
+        },
+    )
+    .unwrap();
+    write_case(
+        &out_dir,
+        "preset_m8",
+        &PairParams {
+            profile: m8_prof,
+            generate: PairMode::Pair,
+            nut_wall_thickness: 4.0,
+            pair_spacing: 8.0,
+            apply_bolt_clearance: false,
+            coaxial_overlay: false,
+        },
+    );
+
+    // 4. Asymmetric buttress (10 deg / 45 deg)
     let mut buttress = base_profile();
     buttress.major_diameter = 24.0;
     buttress.pitch = 3.5;
@@ -89,58 +127,12 @@ fn main() {
             generate: PairMode::Pair,
             nut_wall_thickness: 5.0,
             pair_spacing: 8.0,
+            apply_bolt_clearance: false,
             coaxial_overlay: false,
         },
     );
 
-    // 4. Multi-start (2 starts, P=2.5, lead=5.0)
-    let mut multi = base_profile();
-    multi.pitch = 2.5;
-    multi.starts = 2;
-    write_case(
-        &out_dir,
-        "multistart_2",
-        &PairParams {
-            profile: multi,
-            generate: PairMode::Pair,
-            nut_wall_thickness: 5.0,
-            pair_spacing: 8.0,
-            coaxial_overlay: false,
-        },
-    );
-
-    // 5. Left-hand thread
-    let mut lh = base_profile();
-    lh.left_hand = true;
-    write_case(
-        &out_dir,
-        "left_hand",
-        &PairParams {
-            profile: lh,
-            generate: PairMode::Pair,
-            nut_wall_thickness: 5.0,
-            pair_spacing: 8.0,
-            coaxial_overlay: false,
-        },
-    );
-
-    // 6. Filleted crest & root
-    let mut filleted = base_profile();
-    filleted.crest_fillet = 0.12;
-    filleted.root_fillet = 0.12;
-    write_case(
-        &out_dir,
-        "filleted_45",
-        &PairParams {
-            profile: filleted,
-            generate: PairMode::Pair,
-            nut_wall_thickness: 5.0,
-            pair_spacing: 8.0,
-            coaxial_overlay: false,
-        },
-    );
-
-    // 7. Off-axis shaft (+X at [10, 20, 5]) using append_thread_commands directly
+    // 5. Off-axis shaft (+X)
     let mut p_off = base_profile();
     p_off.major_diameter = 16.0;
     p_off.pitch = 2.5;

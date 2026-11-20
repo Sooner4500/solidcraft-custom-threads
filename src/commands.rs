@@ -1,7 +1,7 @@
 use crate::math::{
     AIR_OVERLAP_MM, AxisFrame, EndChamfer, SolvedGroove, ThreadKind, ThreadProfileParams,
-    ValidationError, axial_span_from_edges, build_axis_frame, detect_kind_from_mesh, dot3,
-    parse_vec3, solve_groove,
+    ValidationError, axial_span_from_edges, build_axis_frame, chamfer_expression,
+    detect_kind_from_mesh, dot3, parse_vec3, solve_groove,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -326,6 +326,8 @@ pub struct PairParams {
     pub generate: PairMode,
     pub nut_wall_thickness: f64,
     pub pair_spacing: f64,
+    /// When true and `generate == PairMode::Bolt`, applies clearance to the bolt directly.
+    pub apply_bolt_clearance: bool,
     /// When true and generating a pair, places Nut coaxially around Bolt (z=0..L)
     /// for cross-section clearance inspection (`snapshot --section xz`).
     pub coaxial_overlay: bool,
@@ -691,6 +693,16 @@ pub struct ThreadMeta {
     pub end_chamfer: String,
     #[serde(default)]
     pub face_span: Option<f64>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub chamfer_size: Option<String>,
+    #[serde(default)]
+    pub offset_mode: Option<String>,
+    #[serde(default)]
+    pub base_radius: Option<f64>,
+    #[serde(default)]
+    pub major_is_favorite: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -746,7 +758,7 @@ fn push_common_parameters(
     cmds: &mut Vec<EngineCommand>,
     p_prefix: &str,
     prof: &ThreadProfileParams,
-    include_major_d: bool,
+    major_d_favorite: bool,
     include_clearances: bool,
     include_nut_wall: Option<f64>,
     include_spacing: Option<f64>,
@@ -759,7 +771,7 @@ fn push_common_parameters(
         c
     };
 
-    if include_major_d {
+    if major_d_favorite {
         add_param(
             cmds,
             format!("{p_prefix}_major_d"),
@@ -767,6 +779,15 @@ fn push_common_parameters(
             "mm",
             true,
             &next_comment("Major Diameter"),
+        );
+    } else {
+        add_param(
+            cmds,
+            format!("{p_prefix}_major_d"),
+            format!("{:.6} mm", prof.major_diameter),
+            "mm",
+            false,
+            "Nominal Major Diameter",
         );
     }
     add_param(
@@ -900,7 +921,7 @@ fn push_common_parameters(
     add_param(
         cmds,
         format!("{p_prefix}_chamfer"),
-        format!("min(0.95 * {p_prefix}_depth, 0.25 * {p_prefix}_length)"),
+        chamfer_expression(p_prefix, prof.chamfer_size, include_nut_wall.is_some()),
         "mm",
         false,
         "Derived lead-in chamfer depth",
@@ -977,7 +998,7 @@ pub fn build_pair_parameter_commands(prefix: &str, p: &PairParams) -> Vec<Engine
         .then_some(p.nut_wall_thickness);
     let include_spacing = (p.generate == PairMode::Pair && !p.coaxial_overlay)
         .then_some(p.pair_spacing);
-    let include_clearances = p.generate != PairMode::Bolt;
+    let include_clearances = p.generate != PairMode::Bolt || p.apply_bolt_clearance;
     push_common_parameters(
         &mut cmds,
         prefix,
@@ -996,13 +1017,14 @@ pub fn build_apply_parameter_commands(
     prof: &ThreadProfileParams,
     base_radius: f64,
     include_clearances: bool,
+    major_d_favorite: bool,
 ) -> Vec<EngineCommand> {
     let mut cmds = Vec::new();
     push_common_parameters(
         &mut cmds,
         prefix,
         prof,
-        false,
+        major_d_favorite,
         include_clearances,
         None,
         None,
@@ -1017,7 +1039,9 @@ pub enum ParametricRadialSource {
     MajorDiameterNominal,
     /// Pair Nut using `<p>_major_d / 2 - <p>_depth + <p>_radial_clr` bore.
     NutWithClearance,
-    /// `apply-thread` using `<p>_base_r` with optional clearance offset.
+    /// Unified `<p>_major_d`-driven external shaft or nominal-major internal bore.
+    MajorParam { apply_clearance: bool },
+    /// Legacy `v0.2.0` mode using `<p>_base_r` with optional clearance offset.
     PickedRadius { apply_clearance: bool },
 }
 
@@ -1407,6 +1431,40 @@ pub fn append_parametric_thread_commands(
             format!("max(0.05 mm, {p}_major_d / 2 - {p}_depth + {p}_radial_clr - 0.2 mm)"),
             format!("{p}_crest_flat + {p}_axial_clr"),
         ),
+        (ParametricRadialSource::MajorParam { apply_clearance }, ThreadKind::External) => {
+            if *apply_clearance {
+                (
+                    format!("{p}_major_d / 2 - {p}_radial_clr"),
+                    format!("{p}_major_d / 2 - {p}_radial_clr - {p}_depth"),
+                    format!("{p}_major_d / 2 - {p}_radial_clr + 0.2 mm"),
+                    format!("{p}_root_flat + {p}_axial_clr"),
+                )
+            } else {
+                (
+                    format!("{p}_major_d / 2"),
+                    format!("{p}_major_d / 2 - {p}_depth"),
+                    format!("{p}_major_d / 2 + 0.2 mm"),
+                    format!("{p}_root_flat"),
+                )
+            }
+        }
+        (ParametricRadialSource::MajorParam { apply_clearance }, ThreadKind::Internal) => {
+            if *apply_clearance {
+                (
+                    format!("{p}_major_d / 2 - {p}_depth + {p}_radial_clr"),
+                    format!("{p}_major_d / 2 + {p}_radial_clr"),
+                    format!("max(0.05 mm, {p}_major_d / 2 - {p}_depth + {p}_radial_clr - 0.2 mm)"),
+                    format!("{p}_crest_flat + {p}_axial_clr"),
+                )
+            } else {
+                (
+                    format!("{p}_major_d / 2 - {p}_depth"),
+                    format!("{p}_major_d / 2"),
+                    format!("max(0.05 mm, {p}_major_d / 2 - {p}_depth - 0.2 mm)"),
+                    format!("{p}_crest_flat"),
+                )
+            }
+        }
         (ParametricRadialSource::PickedRadius { apply_clearance }, ThreadKind::External) => {
             if *apply_clearance {
                 (
@@ -1566,9 +1624,9 @@ pub fn append_parametric_thread_commands(
 
     let mut chamfer_sketch_out = None;
     let mut chamfer_out = None;
-    if s.end_chamfer != EndChamfer::None && (s.ends.start_free || (s.ends.end_free && s.end_chamfer == EndChamfer::Both)) {
-        let cut_start = s.ends.start_free;
-        let cut_end = s.ends.end_free && s.end_chamfer == EndChamfer::Both;
+    let cut_start = s.ends.start_free;
+    let cut_end = s.ends.end_free && (s.end_chamfer != EndChamfer::Start || !s.ends.start_free);
+    if cut_start || cut_end {
         let cs_name = format!("{}_ChamferSketch", s.tag);
         let ch_name = format!("{}_Chamfer", s.tag);
 
@@ -1653,6 +1711,16 @@ pub fn append_parametric_thread_commands(
             }),
         });
 
+        if s.end_chamfer == EndChamfer::None {
+            cmds.push(EngineCommand {
+                command: "timeline.suppress".into(),
+                params: json!({
+                    "features": [ch_name],
+                    "suppressed": true,
+                }),
+            });
+        }
+
         chamfer_sketch_out = Some(cs_name);
         chamfer_out = Some(ch_name);
     }
@@ -1715,16 +1783,27 @@ pub fn build_parametric_thread_pair(
     let mut bodies = Vec::new();
 
     if matches!(p.generate, PairMode::Pair | PairMode::Bolt) {
+        let bolt_clr = p.generate == PairMode::Bolt && p.apply_bolt_clearance;
         let bolt_tag = if tag_prefix.is_empty() {
             "Bolt".to_string()
         } else {
             format!("{tag_prefix}_Bolt")
         };
         let blank = format!("{bolt_tag}Blank");
+        let bolt_diam_expr = if bolt_clr {
+            format!("{prefix}_major_d - 2 * {prefix}_radial_clr")
+        } else {
+            format!("{prefix}_major_d")
+        };
+        let bolt_radial_source = if bolt_clr {
+            ParametricRadialSource::MajorParam { apply_clearance: true }
+        } else {
+            ParametricRadialSource::MajorDiameterNominal
+        };
         bolt_cmds.push(EngineCommand {
             command: "solid.cylinder".into(),
             params: json!({
-                "diameter": format!("{prefix}_major_d"),
+                "diameter": bolt_diam_expr,
                 "height": format!("{prefix}_length"),
                 "base": [0.0, 0.0, 0.0],
                 "axis": "Z",
@@ -1744,7 +1823,7 @@ pub fn build_parametric_thread_pair(
                 frame: frame_bolt,
                 origin_expr: None,
                 kind: ThreadKind::External,
-                radial_source: ParametricRadialSource::MajorDiameterNominal,
+                radial_source: bolt_radial_source,
                 phase_half_pitch: false,
                 anchor: ParametricAnchor::StartFixed(0.0),
                 ends: EndCaps::default(),

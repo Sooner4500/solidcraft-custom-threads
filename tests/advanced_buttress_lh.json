@@ -1,0 +1,28 @@
+{
+  "entry": "advanced-thread",
+  "description": "Advanced left-hand asymmetric 45/12 deg buttress bolt with custom prefix",
+  "params": {
+    "dim_diameter": 20.0,
+    "pitch": 3.0,
+    "dim_length": 12.0,
+    "dim_left_hand": true,
+    "flank_upper_deg": 45.0,
+    "flank_lower_deg": 12.0,
+    "opt_output": "bolt",
+    "opt_param_prefix": "b1"
+  },
+  "expect": {
+    "reply": {
+      "result": {
+        "param_prefix": "b1",
+        "bodies": ["Bolt"]
+      }
+    },
+    "model": {
+      "body_count": 1,
+      "total": {
+        "open_bodies_skipped": 0
+      }
+    }
+  }
+}

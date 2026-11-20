@@ -1,0 +1,28 @@
+{
+  "entry": "edit-thread",
+  "description": "Edit M8 bolt radial clearance, left-hand orientation, wide chamfer, and refresh folder label",
+  "design": "fixtures/m8_bolt.json",
+  "params": {
+    "radial_clearance": 0.25,
+    "left_hand": "left",
+    "end_chamfer": "wide"
+  },
+  "expect": {
+    "reply": {
+      "result": {
+        "param_prefix": "t1",
+        "radial_clearance": 0.25,
+        "left_hand": true,
+        "chamfer_size": "wide",
+        "end_chamfer": "both",
+        "folder_name": "M8x1.25 · 30°/30° · LH · R0.25 A0.10 [t1]"
+      }
+    },
+    "model": {
+      "body_count": 1,
+      "total": {
+        "open_bodies_skipped": 0
+      }
+    }
+  }
+}
